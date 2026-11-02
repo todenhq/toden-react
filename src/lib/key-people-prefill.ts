@@ -78,7 +78,7 @@ export function roleFromDesignation(designation: string | null): KeyPersonRole {
  * holding extras is just the fuller spelling. Mirrors the server's
  * namesLikelySame — keep the two in lockstep.
  */
-function samePerson(a: string, b: string): boolean {
+export function samePerson(a: string, b: string): boolean {
   const words = (s: string) =>
     new Set(
       s

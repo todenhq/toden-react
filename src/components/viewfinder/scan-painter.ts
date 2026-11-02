@@ -1,6 +1,7 @@
 import {
   DOCUMENT_GUIDE_RADIUS as R,
   documentGuideRect,
+  type GuideBand,
   type GuideRect,
 } from '../../lib/document-guide';
 
@@ -11,7 +12,7 @@ import {
 // (gradients, blurred glows, a partially-stroked path) — expressing it as
 // animated SVG would mean reinventing each of those.
 //
-// Layers, back to front: scrim → grid → sweep → border → brackets → dwell ring.
+// Layers, back to front: scrim → sweep → border → brackets → dwell ring.
 // Every constant here is the Flutter one; changing a number changes what the
 // user frames against, so the two must move together.
 
@@ -28,6 +29,8 @@ export interface ScanFrame {
   pulse: number;
   /** Guide aspect (width / height). */
   aspect: number;
+  /** The free band an upright guide is fitted to (documentGuideRect). */
+  band?: GuideBand | null;
   /** CSS colour for the state's accent. */
   accent: string;
 }
@@ -56,12 +59,11 @@ export function paintScan(
   size: { width: number; height: number },
   f: ScanFrame,
 ): void {
-  const rect = documentGuideRect(size, f.aspect);
+  const rect = documentGuideRect(size, f.aspect, f.band);
   ctx.clearRect(0, 0, size.width, size.height);
 
   paintScrim(ctx, size, rect, f.scrim);
   if (f.sweep !== null) {
-    paintGrid(ctx, rect, f.sweep, f.accent);
     paintSweep(ctx, rect, f.sweep, f.accent);
   }
   paintBorder(ctx, rect, f);
@@ -83,36 +85,6 @@ function paintScrim(
   // evenodd punches the guide out of the full-screen rect.
   ctx.fillStyle = `rgba(0, 0, 0, ${scrim})`;
   ctx.fill('evenodd');
-  ctx.restore();
-}
-
-/**
- * Faint drifting grid — reads as "processing", and gives the sweep something to
- * travel over so motion is visible against a plain background.
- */
-function paintGrid(
-  ctx: CanvasRenderingContext2D,
-  rect: GuideRect,
-  phase: number,
-  accent: string,
-) {
-  const STEP = 26;
-  ctx.save();
-  roundRectPath(ctx, rect, R);
-  ctx.clip();
-  ctx.strokeStyle = withAlpha(accent, 0.1);
-  ctx.lineWidth = 1;
-  const drift = phase * STEP; // one cell per cycle, so it loops seamlessly
-  ctx.beginPath();
-  for (let x = rect.x - STEP + drift; x < rect.x + rect.width; x += STEP) {
-    ctx.moveTo(x, rect.y);
-    ctx.lineTo(x, rect.y + rect.height);
-  }
-  for (let y = rect.y - STEP + drift; y < rect.y + rect.height; y += STEP) {
-    ctx.moveTo(rect.x, y);
-    ctx.lineTo(rect.x + rect.width, y);
-  }
-  ctx.stroke();
   ctx.restore();
 }
 

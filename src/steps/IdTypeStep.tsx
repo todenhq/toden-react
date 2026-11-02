@@ -8,6 +8,7 @@ import {
   IdCard,
   Contact,
   BookUser,
+  Smartphone,
 } from '../components/icons';
 import { StepHeader } from '../components/StepHeader';
 import { Card } from '../components/ui/card';
@@ -29,6 +30,8 @@ const ID_TYPE_ICONS: Record<string, React.ComponentType<{ className?: string }>>
   bvn: Landmark, // Bank Verification Number → bank/landmark
   nin: Fingerprint,
   vnin: Fingerprint,
+  'nin-phone': Fingerprint,
+  'phone-number': Smartphone,
   passport: BookUser,
   'drivers-license': IdCard, // an ID card, like the other licences and cards
   pvc: Contact, // Permanent Voter's Card

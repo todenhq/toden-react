@@ -1,6 +1,6 @@
 'use client';
 
-import { configScope } from '../lib/scope';
+import { configScope, unsupportedScopeConfig } from '../lib/scope';
 import { hasSupportingDocumentsStep, verifiedIdsFor } from '../lib/supporting-documents';
 import React, { useEffect, useState } from 'react';
 import { buildThemeVars, resolveOverlayColor } from '../lib/theme';
@@ -24,6 +24,7 @@ import { LivenessCameraContext } from './liveness-camera';
 import { useLivenessLight } from './use-liveness-light';
 import { Button } from './ui/button';
 import { SessionCancelledScreen, useReportCancellation } from './SessionCancelledScreen';
+import { useReportUnsupportedScope } from './unsupported-scope';
 import { useText } from '../i18n';
 import { cn } from '../lib/utils';
 import { useVerificationContext } from '../context/VerificationContext';
@@ -41,6 +42,9 @@ import { BackAvailableContext, useOpeningStep } from './opening-step';
 import { SupportingDocumentsStep } from '../steps/SupportingDocumentsStep';
 import { ProofOfAddressStep } from '../steps/ProofOfAddressStep';
 import { AddressCollectionStep } from '../steps/AddressCollectionStep';
+import { SavedAddressSheet } from '../steps/address/SavedAddressSheet';
+import { AddressBookStep } from '../steps/address/AddressBookStep';
+import { addressBookOffer, reusedAddressStep } from '../lib/address-book';
 import { AddressSearchStep } from '../steps/address/AddressSearchStep';
 import { AddressEntranceStep } from '../steps/address/AddressEntranceStep';
 import { AddressReviewStep } from '../steps/address/AddressReviewStep';
@@ -66,6 +70,7 @@ import { QuestionnaireStep } from '../steps/QuestionnaireStep';
 import { PreviewCapturePlaceholder } from '../steps/PreviewCapturePlaceholder';
 import { SubmittedStep } from '../steps/SubmittedStep';
 import { CompletedStep } from '../steps/CompletedStep';
+import { ModalSurfaceContext } from '../lib/modal-surface';
 
 interface VerificationModalProps {
   open: boolean;
@@ -171,10 +176,23 @@ function CurrentStep({
       return <ProofOfAddressStep />;
     case 'supporting-documents':
       return <SupportingDocumentsStep />;
+    case 'address-book':
+      return <AddressBookStep />;
+    // The offer of a saved address is a sheet over whichever opens the flow.
     case 'address-search':
-      return <AddressSearchStep />;
+      return (
+        <>
+          <AddressSearchStep />
+          <SavedAddressSheet />
+        </>
+      );
     case 'address-collection':
-      return <AddressCollectionStep />;
+      return (
+        <>
+          <AddressCollectionStep />
+          <SavedAddressSheet />
+        </>
+      );
     case 'address-entrance':
       return <AddressEntranceStep />;
     case 'address-review':
@@ -256,8 +274,13 @@ export function VerificationModal({ open, onClose, showThemeToggle, disableClose
   const overlayColor = resolveOverlayColor(config.appearance, isDarkTheme);
   useBrandFonts(config.appearance);
   // A fatal config-load failure (e.g. wrong API key) blocks the whole flow.
-  const configError =
-    config.serverConfig.status === 'error' && config.serverConfig.fatal
+  // A business workflow with a biometric scope is refused outright: it should
+  // never arrive (publish refuses it), and it must never open a camera.
+  const unsupportedScope = unsupportedScopeConfig(config);
+  useReportUnsupportedScope(unsupportedScope, config.onError, t('general.configError.unsupportedScope'));
+  const configError = unsupportedScope
+    ? t('general.configError.unsupportedScope')
+    : config.serverConfig.status === 'error' && config.serverConfig.fatal
       ? config.serverConfig.error ?? t('general.configError.description')
       : null;
   // Cancelled by the organisation (lib/session-cancelled.ts): terminal for this
@@ -295,7 +318,7 @@ export function VerificationModal({ open, onClose, showThemeToggle, disableClose
     hasSupportingDocuments,
     hasAddressCollection,
     addressFlow: (() => {
-      if (!hasAddressCollection || isBusiness) return undefined;
+      if (!hasAddressCollection) return undefined;
       const flow = addressFlowOptions({
         photo: config.addressCollection?.photo,
         streetView: config.addressCollection?.streetView,
@@ -307,7 +330,11 @@ export function VerificationModal({ open, onClose, showThemeToggle, disableClose
         hasGoogleKey: Boolean(config.serverConfig?.googleMapsBrowserKey),
         hasStreetViewFrame: Boolean(config.serverConfig?.mapsFrameUrl),
       });
-      return { search: flow.searchAvailable, entrance: flow.photoMode !== 'off' || flow.streetViewOffered };
+      return {
+        search: flow.searchAvailable,
+        entrance: flow.photoMode !== 'off' || flow.streetViewOffered,
+        reused: addressBookOffer(config).reuse && state.addressBookReuse != null,
+      };
     })(),
     hasQuestionnaire,
     // Present only on a session a reviewer sent back. Narrows the order to the
@@ -326,7 +353,12 @@ export function VerificationModal({ open, onClose, showThemeToggle, disableClose
   // its Consent card still asks for 'consent', and the preview must show what
   // an applicant will see, which is the first real step (user report
   // 2026-09-07: "turned off consent but it still shows on the builder preview").
-  const shownStep = resolveNarrowedStep(state.currentStep, stepOptions);
+  // A picked saved address replaces the capture steps: anything landing on
+  // one goes to the address book step instead (lib/address-book.ts).
+  const shownStep = resolveNarrowedStep(
+    reusedAddressStep(state.currentStep, stepOptions.addressFlow?.reused === true),
+    stepOptions,
+  );
   // The submit step reads it to offer Go back after a refusal.
   const stepOrder = buildStepOrder(stepOptions);
   const skipping = shownStep !== state.currentStep;
@@ -367,6 +399,8 @@ export function VerificationModal({ open, onClose, showThemeToggle, disableClose
   // Reset on step change so a step that unmounts mid-capture — a back gesture,
   // an error boundary — can never strand the chrome hidden.
   const [immersive, setImmersive] = useState(false);
+  // The window's own element, so a step's dialog can sit inside it (lib/modal-surface).
+  const [surface, setSurface] = useState<HTMLElement | null>(null);
   useEffect(() => {
     setImmersive(false);
   }, [state.currentStep]);
@@ -389,8 +423,10 @@ export function VerificationModal({ open, onClose, showThemeToggle, disableClose
     {/* The builder preview is one pane of a larger page. A modal dialog traps
         focus and takes it on mount, which pulled the caret out of whichever
         builder field the author was typing in. Real flows keep both. */}
+    <ModalSurfaceContext.Provider value={surface}>
     <Dialog modal={!config.previewMode} open={open} onOpenChange={(isOpen) => { if (!isOpen && !dismissBlocked) onClose(); }}>
       <DialogContent
+        ref={setSurface}
         onOpenAutoFocus={(event) => { if (config.previewMode) event.preventDefault(); }}
         fullscreen={fullscreen}
         overlayClassName={litForCapture ? 'bg-white' : undefined}
@@ -478,6 +514,7 @@ export function VerificationModal({ open, onClose, showThemeToggle, disableClose
         </div>
       </DialogContent>
     </Dialog>
+    </ModalSurfaceContext.Provider>
     </LivenessCameraContext.Provider>
     </ImmersiveCloseContext.Provider>
     </ImmersiveCaptureContext.Provider>

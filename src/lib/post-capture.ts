@@ -22,10 +22,12 @@ interface AddressFlowFacts {
     googleMapsBrowserKey?: string | null;
     mapsFrameUrl?: string | null;
     environment?: 'DEVELOPMENT' | 'SANDBOX' | 'PRODUCTION';
+    addressBook?: { save?: boolean; reuse?: boolean } | null;
   } | null;
   previewMode?: boolean;
   subjectType?: SubjectType;
   business?: WorkflowBusinessConfig;
+  scope?: string;
 }
 
 /** The address flow's steps for THIS mount (KYB = the single premises step). */
@@ -176,6 +178,7 @@ export function stepAfterCapture(
   VerificationStep,
   | 'proof-of-address'
   | 'supporting-documents'
+  | 'address-book'
   | 'address-search'
   | 'address-collection'
   | 'questionnaire'
@@ -203,7 +206,7 @@ export function stepAfterSupportingDocuments(
   } & AddressFlowFacts,
 ): Extract<
   VerificationStep,
-  'proof-of-address' | 'address-search' | 'address-collection' | 'questionnaire' | 'submitted'
+  'proof-of-address' | 'address-book' | 'address-search' | 'address-collection' | 'questionnaire' | 'submitted'
 > {
   if (hasProofOfAddressStep(config.proofOfAddress)) return 'proof-of-address';
   return stepAfterProofOfAddress(config);
@@ -217,9 +220,9 @@ export function stepAfterSupportingDocuments(
  */
 export function stepAfterProofOfAddress(
   config: { questionnaire?: QuestionnaireConfig } & AddressFlowFacts,
-): Extract<VerificationStep, 'address-search' | 'address-collection' | 'questionnaire' | 'submitted'> {
+): Extract<VerificationStep, 'address-book' | 'address-search' | 'address-collection' | 'questionnaire' | 'submitted'> {
   if (hasAddressCollectionStep(config.addressCollection)) {
-    return addressEntryStep(config) as Extract<VerificationStep, 'address-search' | 'address-collection'>;
+    return addressEntryStep(config) as Extract<VerificationStep, 'address-book' | 'address-search' | 'address-collection'>;
   }
   if (hasActiveQuestionnaire(config.questionnaire)) return 'questionnaire';
   return 'submitted';

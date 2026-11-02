@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
-import { BadgeCheck, Building2, Check, Link2 } from '../components/icons';
+import { BadgeCheck, Building2, Check, FileText, Link2 } from '../components/icons';
 import { CountryFlag } from '../components/CountryFlag';
 import { applicantRoleLabel } from '../lib/business-application';
 import { useText } from '../i18n';
@@ -28,6 +28,9 @@ export interface AwaitRow {
   /** A company on the list completes a KYB application, not a KYC. It gets a
    *  Company tag and its pending state reads "KYB pending". */
   isCorporate?: boolean;
+  /** Added from the company's own documents: says why someone the applicant
+   *  never typed is on the list. */
+  foundInDocuments?: boolean;
 }
 
 /** Section order + header text keys, mirroring the grouped "Awaiting users" design. */
@@ -167,6 +170,11 @@ function AwaitCard({ row, entranceDelayMs = 0 }: { row: AwaitRow; entranceDelayM
               </>
             )}
           </p>
+          {row.foundInDocuments && (
+            <p className="mt-1 flex items-center gap-1.5 text-xs text-muted-foreground">
+              <FileText className="h-3.5 w-3.5 shrink-0" aria-hidden /> {t('keyPeople.await.foundInDocuments')}
+            </p>
+          )}
         </div>
         {/* The icon is not decoration: status is also carried by colour, and
             colour alone is not a signal everyone receives. */}

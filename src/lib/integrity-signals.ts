@@ -1,3 +1,4 @@
+import type { PromptTime } from '../liveness/prompt-timeline';
 // ---------------------------------------------------------------------------
 // Capture-integrity signals, collected during the session and attached to the
 // submit metadata (deviceMetadata.integrity on the server). Two families:
@@ -19,6 +20,8 @@ export interface LivenessSignals {
   mode: 'gestures' | 'flash' | 'both' | 'passive';
   /** The prompts this run used, in order (e.g. ['turn', 'blink']). */
   challenges?: string[];
+  /** When each gesture prompt appeared and passed (liveness/prompt-timeline.ts). */
+  promptTimes?: PromptTime[];
   flash?: {
     passed: boolean;
     score: number;
@@ -118,6 +121,11 @@ export function inspectCameraStream(stream: MediaStream): void {
 
 export function recordLivenessSignals(update: Partial<LivenessSignals> & { mode: LivenessSignals['mode'] }): void {
   livenessSignals = { ...livenessSignals, ...update };
+}
+
+/** When each gesture prompt appeared and passed (liveness/prompt-timeline.ts). */
+export function recordPromptTimes(promptTimes: PromptTime[] | undefined): void {
+  if (livenessSignals) livenessSignals = { ...livenessSignals, promptTimes };
 }
 
 /** The liveness step could not record (or recorded nothing). Cleared on a fresh recording. */

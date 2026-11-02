@@ -19,9 +19,9 @@ describe('registrationNumberHint', () => {
   });
 
   it('other countries get a generic registry tip without format constraints', () => {
-    const hint = registrationNumberHint('GH', business);
+    const hint = registrationNumberHint('SN', business);
     expect(hint.placeholder).toBe('Enter your registration number');
-    expect(hint.tip).toMatch(/business registry in Ghana/);
+    expect(hint.tip).toMatch(/business registry in Senegal/);
     expect(hint.isValidFormat).toBeNull();
   });
 
@@ -45,6 +45,13 @@ describe('provider-documented example placeholders', () => {
     expect(ke.isValidFormat).toBeNull();
     expect(za.isValidFormat).toBeNull();
   });
+
+  it('GH uses the Registrar of Companies prefixes', () => {
+    const gh = registrationNumberHint('GH', business);
+    expect(gh.placeholder).toBe('e.g. CS043840225');
+    expect(gh.tip).toMatch(/CS for a company, BN for a business name or PL for a public company/);
+    expect(gh.isValidFormat).toBeNull();
+  });
 });
 
 describe('workflow copy', () => {
@@ -52,9 +59,9 @@ describe('workflow copy', () => {
     const { defaultText } = await import('../i18n');
     const t: typeof defaultText = (key, vars, legacy) =>
       key === 'business.registration.placeholderGeneric' ? 'Votre numéro' : defaultText(key, vars, legacy);
-    const hint = registrationNumberHint('GH', business, t);
+    const hint = registrationNumberHint('SN', business, t);
     expect(hint.placeholder).toBe('Votre numéro');
     // Untranslated keys fall back to the English default, with the country filled in.
-    expect(hint.tip).toMatch(/business registry in Ghana/);
+    expect(hint.tip).toMatch(/business registry in Senegal/);
   });
 });

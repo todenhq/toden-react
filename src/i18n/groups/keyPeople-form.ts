@@ -21,6 +21,11 @@ export const KEY_PEOPLE_FORM_TEXTS: TextEntry[] = [
   { key: 'keyPeople.form.title.placeholder', label: 'Position placeholder', default: 'e.g. CFO, Board Member' },
   { key: 'keyPeople.form.optional', label: 'Optional field marker', default: '(optional)' },
   { key: 'keyPeople.form.ownership.label', label: 'Ownership label', default: 'Ownership %' },
+  {
+    key: 'keyPeople.form.ownership.required',
+    label: 'Ownership: why it is required',
+    default: 'Required. The percentage decides who is a beneficial owner and must verify their identity.',
+  },
   { key: 'keyPeople.form.ownership.errorRange', label: 'Error: ownership out of range', default: 'Enter a value between 0 and 100.' },
   {
     key: 'keyPeople.form.ownership.combinedError',

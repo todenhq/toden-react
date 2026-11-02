@@ -1,6 +1,9 @@
+import type { SavedAddress } from '../lib/address-book';
 import { SDK_VERSION } from '../utils/device-metadata';
 import { uploadDeviceIdHeader } from '../lib/upload-device-id';
+import { appendUploadSession } from '../lib/upload-session';
 import { compactDrawing, type SignatureDrawing } from '../lib/signature';
+import { businessSearchQuery, type BusinessSearchParams } from '../lib/business-search';
 
 export class VerificationApiError extends Error {
   constructor(
@@ -126,7 +129,7 @@ export interface VerifyRequest {
     website?: string;
     /** Uploaded supporting documents (only honored when the workflow's
      *  `business.documents` block configures them). */
-    documents?: Array<{ type: string; mediaId: string }>;
+    documents?: Array<{ type?: string; group?: string; mediaId: string }>;
     /** Applicant-declared directors & owners (≤20; `email` drives auto-sent
      *  invites; only honored when the workflow sets `keyPeople.collect`). */
     keyPeople?: Array<{
@@ -197,7 +200,16 @@ export interface VerifyRequest {
     deviceLng?: number;
     deviceAccuracy?: number;
     capturedAt?: string;
+    /** Save this address to the person's own Toden address book (the box on
+     *  the review step, unticked by default). */
+    book?: { save: boolean; photo: boolean; directions: boolean };
   };
+  /**
+   * A saved address the person picked from their Toden address book instead
+   * of entering one: the one-time grant from {@link addressBookAddresses} and
+   * the address they chose. Sent INSTEAD of `address`.
+   */
+  addressBookReuse?: { grant: string; entryId: string };
   userData?: {
     firstName?: string;
     lastName?: string;
@@ -213,7 +225,8 @@ export interface VerifyRequest {
    * an invalid/expired proof is dropped, a workflow-required missing one 422s.
    */
   contact?: { emailToken?: string; phoneToken?: string };
-  /** Captured media references. Omitted for business (KYB) submissions — no capture. */
+  /** Captured media references. A business (KYB) submission carries only the
+   *  premises entrance photo (`addressPhoto`), beside the premises pin. */
   mediaIds?: {
     documentFront?: string;
     documentBack?: string;
@@ -365,6 +378,10 @@ export interface SdkConfigResponse {
   /** Framed Google-map picker URL for embedded mounts (grant-carrying; absent
    *  when the platform has no maps key or the request had no Origin). */
   mapsFrameUrl?: string | null;
+  /** The Toden address book on this organisation: `save` offers the box that
+   *  saves the confirmed address to the person's own book, `reuse` the step
+   *  that lets them pick one they saved before. */
+  addressBook?: { save: boolean; reuse: boolean };
 }
 
 /** One Places autocomplete suggestion. */
@@ -441,6 +458,8 @@ export interface WorkflowConfigPayload {
     /** Offered product keys (absent = ['business']). */
     products?: string[];
     requireRegistrationName?: boolean;
+    /** Search by company name on the details step (absent = on). */
+    nameSearch?: boolean;
     /** Key-people (director/owner) verification configuration. */
     keyPeople?: import('../types/business').WorkflowKeyPeopleConfig;
     /** Supporting-document collection configuration. */
@@ -461,6 +480,9 @@ export interface WorkflowConfigPayload {
   allowDocumentUpload?: boolean;
   /** Live camera scan for documents. Default true; false makes capture upload only. */
   allowDocumentScan?: boolean;
+  documentReview?: boolean;
+  documentAudio?: boolean;
+  livenessAudio?: boolean;
   enableLiveness?: boolean;
   /** Presence Intelligence method: gestures (default) | flash | both. */
   livenessMode?: string;
@@ -543,6 +565,10 @@ export interface WorkflowResolutionResponse {
   addressSearch?: boolean;
   addressSearchMode?: 'autocomplete' | 'basic';
   mapsFrameUrl?: string | null;
+  /** The Toden address book on this organisation: `save` offers the box that
+   *  saves the confirmed address to the person's own book, `reuse` the step
+   *  that lets them pick one they saved before. */
+  addressBook?: { save: boolean; reuse: boolean };
   /** KYB only: the mapped applicant workflow, when configured and resolvable. */
   applicantWorkflow?: ApplicantWorkflowPayload | null;
 }
@@ -593,6 +619,9 @@ export interface HandoffSessionSnapshot {
   allowDocumentUpload?: boolean;
   /** Live camera scan for documents. Default true; false makes capture upload only. */
   allowDocumentScan?: boolean;
+  documentReview?: boolean;
+  documentAudio?: boolean;
+  livenessAudio?: boolean;
   enableLiveness?: boolean;
   /** Presence Intelligence method: gestures (default) | flash | both. */
   livenessMode?: string;
@@ -739,6 +768,10 @@ export interface HandoffBootstrapResponse {
   addressSearch?: boolean;
   /** Which search backend ('autocomplete' | 'basic'); absent when none. */
   addressSearchMode?: 'autocomplete' | 'basic';
+  /** The Toden address book on this organisation: `save` offers the box that
+   *  saves the confirmed address to the person's own book, `reuse` the step
+   *  that lets them pick one they saved before. */
+  addressBook?: { save: boolean; reuse: boolean };
   /** Org allowlist + per-ID feature flags (same shape as /config). */
   idTypes: SdkConfigIdType[];
   expiresAt: string;
@@ -768,6 +801,8 @@ export interface AwaitingPersonPayload {
   isApplicant: boolean;
   /** A company completes a KYB application, not a KYC - the list labels it so. */
   isCorporate?: boolean;
+  /** Added from the company's own documents, not listed by the applicant. */
+  foundInDocuments?: boolean;
 }
 
 /**
@@ -808,6 +843,12 @@ export interface CompletedSessionSummary {
    * value was inferred from polling instead.
    */
   keyPeopleSettled?: boolean;
+  /**
+   * Shareholders from the register are still on their way: they will join
+   * `keyPeople`, with invite links, when they arrive. A surface showing the
+   * list keeps re-reading while this is true. Absent on an older server.
+   */
+  keyPeopleOwnershipPending?: boolean;
   /** The submission carried an address pin — a presence check could really
    *  have started. Absent on an older server. */
   addressCollected?: boolean;
@@ -905,25 +946,24 @@ export function createVerificationApi(baseUrl: string, apiKey: string) {
       return request('/session/start', { method: 'POST', body: JSON.stringify(input) });
     },
 
-    /**
-     * Find a business by name. FREE — no provider charge here or upstream, so
-     * the applicant may look as many times as they need.
-     */
     /** Registry regions for a country. Empty when it has a single register. */
     async businessRegions(country: string): Promise<{ regions: { code: string; name: string }[] }> {
       return request(`/business/regions?country=${encodeURIComponent(country)}`);
     },
 
-    async businessSearch(params: {
-      country: string;
-      subdivisionCode?: string;
-      query: string;
-      limit?: number;
-    }): Promise<{ results: { name: string; registrationNumber: string; status?: string }[]; source: string }> {
-      const qs = new URLSearchParams({ country: params.country, query: params.query });
-      if (params.subdivisionCode) qs.set('subdivisionCode', params.subdivisionCode);
-      if (params.limit) qs.set('limit', String(params.limit));
-      return request(`/business/search?${qs.toString()}`);
+    /**
+     * Find a business by name. Free on most registers; where the register
+     * charges per search the org pays, so the attempt session rides along (the
+     * same id `businessSelect` sends) and the server answers refusals such as
+     * `session_required` or `business_search_disabled` (lib/business-search.ts).
+     */
+    async businessSearch(params: BusinessSearchParams): Promise<{
+      results: { name: string; registrationNumber: string; status?: string }[];
+      source: string;
+      /** USD decimal string the org was charged, or null. Not for the applicant. */
+      charged?: string | null;
+    }> {
+      return request(`/business/search?${businessSearchQuery(params)}`);
     },
 
     /**
@@ -962,6 +1002,11 @@ export function createVerificationApi(baseUrl: string, apiKey: string) {
         natureOfBusiness: string | null;
         city: string | null;
         state: string | null;
+        /**
+         * The register has not sent the shareholders yet: `keyPeople` has no
+         * owners, and the server adds them later. Absent on an older server.
+         */
+        ownershipPending?: boolean;
         keyPeople: Array<{
           name: string | null;
           designation: string | null;
@@ -974,6 +1019,36 @@ export function createVerificationApi(baseUrl: string, apiKey: string) {
       } | null;
     }> {
       return request('/business/select', { method: 'POST', body: JSON.stringify(body) });
+    },
+
+    /**
+     * Read an uploaded company document for the people it names, so the
+     * key-people step opens with them filled in. Never blocks the flow:
+     * `read: false` (with a reason) is a normal answer the caller ignores.
+     */
+    async businessDocumentPeople(body: {
+      sessionId: string;
+      mediaId: string;
+      group?: string;
+      type?: string;
+      country: string;
+      registrationNumber?: string;
+      registrationName?: string;
+    }): Promise<{
+      read: boolean;
+      reason?: string;
+      documentType?: string;
+      people?: Array<{
+        name: string | null;
+        designation: string | null;
+        roles?: string[] | null;
+        ownershipPct?: number | null;
+        email?: string | null;
+        isCorporate?: boolean | null;
+        registrationNumber?: string | null;
+      }>;
+    }> {
+      return request('/business/documents/people', { method: 'POST', body: JSON.stringify(body) });
     },
 
     /**
@@ -995,6 +1070,8 @@ export function createVerificationApi(baseUrl: string, apiKey: string) {
       // the multipart part's Content-Type matches the server's allowlist.
       form.append('file', toUploadFile(file, type));
       form.append('type', type);
+      // The attempt session, so the server can count a document's retries.
+      appendUploadSession(form);
 
       // Don't set Content-Type — the browser adds the multipart boundary itself.
       // The per-install id rides every upload (Device Intelligence; omitted
@@ -1068,7 +1145,9 @@ export function createVerificationApi(baseUrl: string, apiKey: string) {
       codeLength?: number;
       /** Org-configured attempt budget (server clamps 1–5). */
       maxAttempts?: number;
-    }): Promise<{ challengeId: string; expiresAt: string; deliveryChannel: string }> {
+      /** The attempt, so the server reads these settings from its pinned workflow. */
+      sessionId?: string;
+    }): Promise<{ challengeId: string; expiresAt: string; deliveryChannel: string; codeLength?: number }> {
       return request('/contact/send', { method: 'POST', body: JSON.stringify(body) });
     },
 
@@ -1086,6 +1165,26 @@ export function createVerificationApi(baseUrl: string, apiKey: string) {
       country?: string;
     }): Promise<{ verified: boolean; token: string }> {
       return request('/contact/check', { method: 'POST', body: JSON.stringify(body) });
+    },
+
+    /** Whether the email has a saved address this flow could take. */
+    async addressBookLookup(email: string, presence: boolean): Promise<{ recognised: boolean }> {
+      return request('/address-book/lookup', { method: 'POST', body: JSON.stringify({ email, presence }) });
+    },
+
+    /** Send a code to the email the person signs in to Toden with. */
+    async addressBookCode(email: string): Promise<{ challengeId: string; expiresInMinutes: number }> {
+      return request('/address-book/code', { method: 'POST', body: JSON.stringify({ email }) });
+    },
+
+    /** Check the code: the person's saved addresses (street and area only) and
+     *  a one-time grant the submission spends. */
+    async addressBookAddresses(challengeId: string, code: string): Promise<{
+      grant: string;
+      expiresAt: string;
+      addresses: SavedAddress[];
+    }> {
+      return request('/address-book/addresses', { method: 'POST', body: JSON.stringify({ challengeId, code }) });
     },
 
     // Minimal, publishable-safe status (no PII). The full result lives behind a

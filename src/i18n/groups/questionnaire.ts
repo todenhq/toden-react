@@ -21,6 +21,17 @@ export const QUESTIONNAIRE_TEXTS: TextGroup = {
       multiline: true,
       configPath: ['questionnaire', 'description'],
     },
+    {
+      key: 'questionnaire.title.business',
+      label: 'Title (business)',
+      default: 'A few questions about your business',
+    },
+    {
+      key: 'questionnaire.description.business',
+      label: 'Description (business)',
+      default: 'This information is required for compliance and helps keep your business account safe.',
+      multiline: true,
+    },
     { key: 'questionnaire.amountPlaceholder', label: 'Amount placeholder', default: '0.00' },
     { key: 'questionnaire.selectPlaceholder', label: 'Choice placeholder', default: 'Select an option' },
     { key: 'questionnaire.detailLabel', label: 'Other: label', default: 'Please specify' },

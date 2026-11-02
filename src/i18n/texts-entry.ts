@@ -1,5 +1,5 @@
 /**
- * `@myazahq/kyc-sdk-react/texts`: the text catalogue alone, with no React and
+ * `@toden/react/texts`: the text catalogue alone, with no React and
  * no screens, so a settings page can list every customisable text without
  * loading the SDK.
  */

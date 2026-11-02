@@ -7,6 +7,8 @@ import { cn } from '../lib/utils';
 import type { KeyPersonEntry } from '../context/types';
 import type { KeyPersonRole } from '../types/business';
 import { useText } from '../i18n';
+import { useVerificationConfig } from '../context/VerificationConfigContext';
+import { keyPeopleRequireOwnership, rowNeedsStake } from '../lib/key-person-stake';
 
 /** Whether the role is an ownership one (% field is only meaningful then). */
 function isOwnerRole(role: KeyPersonRole): boolean {
@@ -31,6 +33,7 @@ export function KeyPersonOwnershipField({
   combinedPctError: string | null;
 }) {
   const t = useText();
+  const required = keyPeopleRequireOwnership(useVerificationConfig().business) && rowNeedsStake(entry);
   const corp = entry.isCorporate;
   const pct = entry.ownershipPct.trim();
   const pctNum = Number(pct);
@@ -46,7 +49,11 @@ export function KeyPersonOwnershipField({
     <div className="space-y-2">
       <Label htmlFor="kp-sheet-pct">
         {t('keyPeople.form.ownership.label')}{' '}
-        <span className="text-muted-foreground">{t('keyPeople.form.optional')}</span>
+        {required ? (
+          <span aria-hidden className="text-destructive">*</span>
+        ) : (
+          <span className="text-muted-foreground">{t('keyPeople.form.optional')}</span>
+        )}
       </Label>
       <div className="relative">
         {/* Native spinners hidden: the % suffix takes their corner, and a
@@ -59,6 +66,8 @@ export function KeyPersonOwnershipField({
           max={100}
           placeholder="0"
           value={entry.ownershipPct}
+          required={required}
+          aria-describedby={required && pct === '' ? 'kp-sheet-pct-required' : undefined}
           onChange={(e) => onChange({ ownershipPct: e.target.value })}
           className={cn(
             'pr-8 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none',
@@ -91,6 +100,11 @@ export function KeyPersonOwnershipField({
       />
       {pctInvalid && (
         <p className="text-sm text-destructive">{t('keyPeople.form.ownership.errorRange')}</p>
+      )}
+      {required && pct === '' && (
+        <p id="kp-sheet-pct-required" className="text-xs text-muted-foreground">
+          {t('keyPeople.form.ownership.required')}
+        </p>
       )}
       {!pctInvalid && combinedPctError && (
         <p className="text-sm text-destructive">{combinedPctError}</p>

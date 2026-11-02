@@ -59,10 +59,14 @@ export const UPLOAD_DOCUMENT_CAPTURE_ENTRIES: TextEntry[] = [
   { key: 'uploadDocument.hint.showMrz', label: 'Hint: show the bottom strip', default: 'Show the bottom strip of the page' },
   { key: 'uploadDocument.hint.holdStill', label: 'Hint: hold still', default: 'Hold still…' },
   { key: 'uploadDocument.hint.captured', label: 'Hint: captured', default: 'Captured' },
+  { key: 'uploadDocument.hint.placeDocument', label: 'Hint: no document found', default: 'Place your ID inside the frame' },
+  { key: 'uploadDocument.hint.fitCorners', label: 'Hint: a corner is cut off', default: 'Fit all four corners of your ID inside the frame' },
+  { key: 'uploadDocument.hint.spaceAround', label: 'Hint: too close to the edge', default: 'Move back a little so there is space around your ID' },
+  { key: 'uploadDocument.hint.faceNotDocument', label: 'Hint: the camera sees a face, not the ID', default: 'Hold your ID up in front of the camera' },
   {
     key: 'uploadDocument.camera.autoCaption',
     label: 'Camera: caption under the camera',
-    default: 'Card detected automatically · or tap the button to capture manually',
+    default: 'Your ID is captured automatically once all four corners are inside the frame',
     multiline: true,
   },
   {
@@ -95,5 +99,7 @@ export const UPLOAD_DOCUMENT_CAPTURE_ENTRIES: TextEntry[] = [
   { key: 'uploadDocument.tryAgain', label: 'Try again button', default: 'Try Again' },
   { key: 'uploadDocument.camera.openingPicker', label: 'Camera: opening the photo picker', default: 'Opening photo picker…' },
   { key: 'uploadDocument.camera.backToCamera', label: 'Camera: back to camera button', default: 'Back to camera' },
+  { key: 'uploadDocument.handover.title', label: 'Checking a scan: title', default: 'Checking your document' },
+  { key: 'uploadDocument.handover.description', label: 'Checking a scan: description', default: 'This only takes a moment.' },
   { key: 'uploadDocument.compressing', label: 'Compressing the image', default: 'Compressing image…' },
 ];

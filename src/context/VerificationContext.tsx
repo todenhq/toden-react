@@ -3,6 +3,7 @@
 import React, { createContext, useContext, useReducer, useMemo, useEffect, type ReactNode } from 'react';
 import { recordStep } from '../lib/step-log';
 import { normalizeRestoredKeyPeople } from '../lib/key-person-normalize';
+import { documentPeopleReducer } from '../lib/document-people';
 import { withoutUnrecordedSelfie } from '../lib/liveness-resume';
 import { primeDeviceHints } from '../utils/device-metadata';
 import type { VerificationState, VerificationAction } from './types';
@@ -47,6 +48,9 @@ export const initialVerificationState: VerificationState = {
   poaDocumentType: null,
   poaFileName: null,
   address: null,
+  addressBookReuse: null,
+  addressBookReuseRefused: false,
+  addressBookOfferClosed: false,
   verificationId: null,
   error: null,
 };
@@ -125,6 +129,9 @@ export function verificationReducer(state: VerificationState, action: Verificati
                 // partial backfill left `.trim()` crashing on rows missing
                 // `name`/`email`/`ownershipPct`). Degrade to restoring less,
                 // never to breaking the flow.
+                // A read in flight when the session was saved never answers
+                // this page: no spinner for it.
+                documentPeopleReading: [],
                 ...(d.businessApplication.keyPeople
                   ? {
                       keyPeople:
@@ -337,6 +344,9 @@ export function verificationReducer(state: VerificationState, action: Verificati
       return { ...state, supportingDocuments: action.payload };
     case 'SET_BUSINESS_APPLICATION':
       return { ...state, businessApplication: { ...state.businessApplication, ...action.payload } };
+    case 'DOCUMENT_PEOPLE_READING':
+    case 'DOCUMENT_PEOPLE_READ':
+      return { ...state, businessApplication: documentPeopleReducer(state.businessApplication, action) };
 
     // ── Document capture ────────────────────────────────────────────────────
 
@@ -484,6 +494,23 @@ export function verificationReducer(state: VerificationState, action: Verificati
       return { ...state, address: action.payload };
     case 'SET_ADDRESS_SANDBOX_OUTCOME':
       return { ...state, addressSandboxOutcome: action.payload };
+    case 'SET_ADDRESS_BOOK_SAVE':
+      return state.address ? { ...state, address: { ...state.address, book: action.payload } } : state;
+    case 'SET_ADDRESS_BOOK_REUSE':
+      return { ...state, addressBookReuse: action.payload, addressBookReuseRefused: false };
+    case 'ADDRESS_BOOK_REUSE_REFUSED':
+      // The offer comes back over the address step, saying why.
+      return {
+        ...state,
+        addressBookReuse: null,
+        addressBookReuseRefused: true,
+        addressBookOfferClosed: false,
+        currentStep: 'address-collection',
+      };
+    case 'CLOSE_ADDRESS_BOOK_OFFER':
+      return { ...state, addressBookOfferClosed: true, addressBookReuseRefused: false };
+    case 'REOPEN_ADDRESS_BOOK_OFFER':
+      return { ...state, addressBookReuse: null, addressBookOfferClosed: false, addressBookReuseRefused: false };
     case 'CLEAR_ADDRESS':
       return {
         ...state,

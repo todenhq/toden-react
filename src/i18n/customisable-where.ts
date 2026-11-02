@@ -5,7 +5,9 @@ import type { TextAvailability } from './types';
 export const EVERYWHERE: TextAvailability = {};
 export const IDENTITY: TextAvailability = { subject: 'individual' };
 export const FULL_IDENTITY: TextAvailability = { subject: 'individual', scopes: ['full'] };
-export const BUSINESS: TextAvailability = { subject: 'business' };
+/** The KYB application's screens. A SCOPED business workflow runs its scope's
+ *  own screens instead, so these never show there. */
+export const BUSINESS: TextAvailability = { subject: 'business', scopes: ['full'] };
 export const FACE_SCOPES = ['full', 'biometric-authentication', 'biometric-enrollment'];
 export const LIVENESS: TextAvailability = { subject: 'individual', scopes: FACE_SCOPES, step: 'liveness' };
 export const CAMERA: TextAvailability = { subject: 'individual', scopes: FACE_SCOPES };

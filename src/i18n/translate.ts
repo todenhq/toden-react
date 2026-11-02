@@ -1,5 +1,6 @@
 import { DEFAULT_TEXTS } from './catalogue';
 import { CUSTOMISABLE_KEYS } from './customisable';
+import { BUSINESS_VARIANT_BASES } from './business-variants';
 import type { TextFn, TextVars, WorkflowTexts } from './types';
 
 /** The language every workflow falls back to, and the one the defaults are in. */
@@ -27,7 +28,11 @@ export function resolveText(
   const usable = (value: unknown) => (typeof value === 'string' && value.trim() ? value : undefined);
   // Only the customisable texts take a workflow's words; the rest (errors,
   // system messages, hints) always read as the SDK wrote them.
-  const pick = (lang: string) => (CUSTOMISABLE_KEYS.has(key) ? usable(texts?.[lang]?.[key]) : undefined);
+  // A scoped business variant takes the org's words for the text it stands in
+  // for (i18n/business-variants.ts); otherwise only a customisable key reads them.
+  const base = BUSINESS_VARIANT_BASES[key];
+  const source = CUSTOMISABLE_KEYS.has(key) ? key : base && CUSTOMISABLE_KEYS.has(base) ? base : null;
+  const pick = (lang: string) => (source ? usable(texts?.[lang]?.[source]) : undefined);
   const own = language === BASE_LANGUAGE ? undefined : pick(language);
   const template = own ?? usable(options.legacy) ?? pick(BASE_LANGUAGE) ?? DEFAULT_TEXTS[key] ?? key;
   return fillPlaceholders(template, vars).replace(/[ \t]{2,}/g, ' ').trim();

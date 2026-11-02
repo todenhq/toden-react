@@ -14,8 +14,11 @@ import { useVerificationContext } from '../context/VerificationContext';
 import { useVerificationConfig } from '../context/VerificationConfigContext';
 import { stepAfterContact } from '../lib/contact-steps';
 import { isBusinessFlow } from '../lib/business';
+import { isScopedBusiness } from '../lib/scope';
+import { businessKey } from '../i18n/business-variants';
 import { describeSendError, describeCheckError } from '../lib/contact-errors';
 import { defaultCountry } from '../lib/country-default';
+import { sentCodeLength } from '../lib/contact-code-length';
 
 // Contact-verification OTP step (email or phone — one component, two mounts).
 // enter → send → code entry → verified → continue. The proof token is stored
@@ -28,9 +31,14 @@ export function ContactVerificationStep({ channel }: { channel: 'email' | 'phone
   const config = useVerificationConfig();
   const t = useText();
   const isEmail = channel === 'email';
+  // A scoped business workflow confirms the company's contact details.
+  const scopedBusiness = isScopedBusiness(config);
   const stepConfig = isEmail ? config.emailVerification : config.phoneVerification;
   const required = stepConfig?.required !== false;
-  const codeLength = Math.min(8, Math.max(4, stepConfig?.codeLength ?? DEFAULT_CODE_LENGTH));
+  const configuredLength = Math.min(8, Math.max(4, stepConfig?.codeLength ?? DEFAULT_CODE_LENGTH));
+  // What the server actually sent, which its pinned workflow decides.
+  const [sentLength, setSentLength] = useState<number | null>(null);
+  const codeLength = sentLength ?? configuredLength;
   const maxAttempts = stepConfig?.maxAttempts;
   const alreadyVerified = isEmail ? state.contact.emailToken != null : state.contact.phoneToken != null;
 
@@ -94,10 +102,12 @@ export function ContactVerificationStep({ channel }: { channel: 'email' | 'phone
       const res = await config.api.contactSend({
         channel,
         destination,
-        codeLength,
+        codeLength: configuredLength,
+        ...(state.sessionId ? { sessionId: state.sessionId } : {}),
         ...(maxAttempts != null ? { maxAttempts } : {}),
         ...(isEmail ? {} : { via: sendVia }),
       });
+      setSentLength(sentCodeLength(res.codeLength, configuredLength));
       setChallengeId(res.challengeId);
       setExpiresAt(res.expiresAt ?? null);
       setCode('');
@@ -139,9 +149,9 @@ export function ContactVerificationStep({ channel }: { channel: 'email' | 'phone
   return (
     <div className="space-y-6 animate-slide-up">
       <StepHeader
-        title={t(isEmail ? 'contact.email.title' : 'contact.phone.title')}
+        title={t(businessKey(isEmail ? 'contact.email.title' : 'contact.phone.title', scopedBusiness))}
         description={t(
-          `contact.${channel}.${challengeId ? 'codeSent' : 'intro'}`,
+          businessKey(`contact.${channel}.${challengeId ? 'codeSent' : 'intro'}`, scopedBusiness),
           { codeLength, destination, channel: channelName(via, t) },
         )}
       />
@@ -178,6 +188,7 @@ export function ContactVerificationStep({ channel }: { channel: 'email' | 'phone
               config.country,
             )}
             disabled={busy}
+            scopedBusiness={scopedBusiness}
           />
           <ContactChannelPicker offered={offeredChannels} picked={via} onPick={setVia} disabled={busy} />
         </div>
@@ -225,7 +236,7 @@ export function ContactVerificationStep({ channel }: { channel: 'email' | 'phone
 
       <p className="flex items-center justify-center gap-1.5 text-xs text-muted-foreground">
         <Icon className="h-3 w-3" />
-        {t(`contact.${channel}.footer`)}
+        {t(businessKey(`contact.${channel}.footer`, scopedBusiness))}
       </p>
     </div>
   );

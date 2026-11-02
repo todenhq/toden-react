@@ -1,8 +1,10 @@
 'use client';
 
-import React from 'react';
+import React, { useState } from 'react';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
+import { Copy } from '../components/icons';
+import { otpCodeFrom, pastedCode } from '../lib/otp-code';
 import { InputOTP, InputOTPGroup, InputOTPSlot } from '../components/ui/input-otp';
 import type { OtpInputStyle } from '../types/config';
 import { useText } from '../i18n';
@@ -24,6 +26,19 @@ interface ContactCodeEntryProps {
 
 export function ContactCodeEntry({ code, onChange, codeLength, style, disabled, onComplete }: ContactCodeEntryProps) {
   const t = useText();
+  const [noCode, setNoCode] = useState(false);
+  const apply = (next: string) => {
+    setNoCode(false);
+    onChange(next);
+    if (next.length === codeLength) onComplete?.(next);
+  };
+  const canPaste = typeof navigator !== 'undefined' && typeof navigator.clipboard?.readText === 'function';
+  const paste = async () => {
+    const text = await navigator.clipboard.readText().catch(() => '');
+    const next = pastedCode(text, codeLength);
+    if (next) apply(next);
+    else setNoCode(true);
+  };
   return (
     <div className="space-y-2">
       <Label htmlFor="contact-code">{t('contact.code.label')}</Label>
@@ -34,14 +49,9 @@ export function ContactCodeEntry({ code, onChange, codeLength, style, disabled, 
           inputMode="numeric"
           autoComplete="one-time-code"
           placeholder={'0'.repeat(codeLength)}
-          maxLength={codeLength}
           className="text-center text-lg font-semibold tracking-[0.4em]"
           value={code}
-          onChange={(e) => {
-            const next = e.target.value.replace(/\D/g, '').slice(0, codeLength);
-            onChange(next);
-            if (next.length === codeLength) onComplete?.(next);
-          }}
+          onChange={(e) => apply(otpCodeFrom(e.target.value, code, codeLength))}
           disabled={disabled}
         />
       ) : (
@@ -50,7 +60,12 @@ export function ContactCodeEntry({ code, onChange, codeLength, style, disabled, 
             id="contact-code"
             maxLength={codeLength}
             value={code}
-            onChange={onChange}
+            pattern="^\\d*$"
+            pasteTransformer={(text) => otpCodeFrom(text, '', codeLength)}
+            onChange={(next) => {
+              setNoCode(false);
+              onChange(next);
+            }}
             onComplete={onComplete}
             disabled={disabled}
             containerClassName="justify-center"
@@ -61,6 +76,24 @@ export function ContactCodeEntry({ code, onChange, codeLength, style, disabled, 
               ))}
             </InputOTPGroup>
           </InputOTP>
+        </div>
+      )}
+      {canPaste && (
+        <div className="text-center">
+          <button
+            type="button"
+            disabled={disabled}
+            onClick={() => void paste()}
+            className="inline-flex min-h-11 items-center gap-1.5 rounded-lg px-2 text-sm font-medium text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
+          >
+            <Copy className="h-4 w-4" aria-hidden />
+            {t('contact.code.paste')}
+          </button>
+          {noCode && (
+            <p role="alert" className="text-xs text-destructive">
+              {t('contact.code.pasteNone')}
+            </p>
+          )}
         </div>
       )}
     </div>

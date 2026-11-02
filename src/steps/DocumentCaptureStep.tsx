@@ -32,15 +32,36 @@ import {
 	useDocumentDetection,
 	type CardBounds,
 } from "../hooks/useDocumentDetection";
+import { useFaceWatch } from "../hooks/useFaceWatch";
 import { useImageCompress } from "../hooks/useImageCompress";
 import { useTorch } from "../hooks/useTorch";
+import { useViewAspect } from "../hooks/useViewAspect";
 import { ImmersiveOverlay } from "../components/viewfinder/ImmersiveOverlay";
 import { InlineOverlay } from "../components/viewfinder/InlineOverlay";
 import { useSetImmersiveCapture } from "../components/immersive-capture";
 import { isDesktopDevice } from "../lib/device";
-import { documentCropRect } from "../lib/document-guide";
+import {
+	documentCropRect,
+	documentGuideAspect,
+	type GuideBand,
+} from "../lib/document-guide";
+import { onScreenGuideAspect, turnsDocument } from "../lib/document-turn";
+import { bleedCropRect, coverVisibleRegion } from "../lib/document-corners";
+import { CORNER_HINTS, withCornerGuidance } from "../lib/document-hints";
+import { cropVideoFrame } from "../lib/video-crop";
 import { shortDocumentLabel } from "../lib/document-label";
-import { documentCaptureMethods } from "../lib/document-capture-methods";
+import { specimenTitle } from "../lib/document-specimen";
+import { regionCountryName } from "../lib/regions";
+import { TurnOverPrompt } from "../components/viewfinder/TurnOverPrompt";
+import type { DocumentSpecimenSubject } from "../components/viewfinder/DocumentGhost";
+import {
+	afterDocumentCapture,
+	documentCaptureMethods,
+	recordsDocumentAudio,
+	type DocumentSideSource,
+} from "../lib/document-capture-methods";
+import { useDocumentMicrophone } from "../hooks/useDocumentMicrophone";
+import { DocumentHandover } from "./DocumentHandover";
 import { DocumentUploadPanel } from "./DocumentUploadPanel";
 import { DocumentCaptureWarning } from "./DocumentCaptureWarning";
 import { useDocumentCaptureCheck } from "./use-document-capture-check";
@@ -119,6 +140,12 @@ function grabFrameSnapshot(
 	return { url: canvas.toDataURL("image/jpeg", 0.82), w: vw, h: vh };
 }
 
+/** After a tap the person knows what is next. With the review screen off nothing
+ *  was tapped, so this is their time to read it and turn the document over:
+ *  shorter, and the camera shoots the same side twice. */
+const FLIP_TAPPED_MS = 1500;
+const FLIP_UNTAPPED_MS = 5000;
+
 export function DocumentCaptureStep() {
 	const { state, dispatch } = useVerificationContext();
 	const config = useVerificationConfig();
@@ -163,6 +190,16 @@ export function DocumentCaptureStep() {
 		state.documentBackImage,
 	);
 	const [showFlipBanner, setShowFlipBanner] = useState(false);
+	const [flipCanSkip, setFlipCanSkip] = useState(false);
+	// The prompt has shown the back, so the guide need not show it again.
+	const [backAnnounced, setBackAnnounced] = useState(false);
+	const flipTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+	useEffect(
+		() => () => {
+			if (flipTimerRef.current) clearTimeout(flipTimerRef.current);
+		},
+		[],
+	);
 	const [isUploading, setIsUploading] = useState(false);
 	// Whether the uploaded photos can be read, asked before moving on.
 	const {
@@ -172,6 +209,16 @@ export function DocumentCaptureStep() {
 		check: checkCapture,
 	} = useDocumentCaptureCheck();
 	const [uploadError, setUploadError] = useState<string | null>(null);
+	// How each side's photo arrived. A restored photo has no source, so coming
+	// back to this step always shows the review.
+	const sourcesRef = useRef<{ front: DocumentSideSource; back: DocumentSideSource }>({
+		front: null,
+		back: null,
+	});
+	// The review is switched off and a scan is moving straight on. The review
+	// comes back the moment there is something to do: see `showHandover`.
+	const [handingOver, setHandingOver] = useState(false);
+	const handoverStartedRef = useRef(false);
 	// "Upload failed. Retrying (n/total)…" surfaced while a transient upload retries.
 	const [retryInfo, setRetryInfo] = useState<{
 		attempt: number;
@@ -224,9 +271,16 @@ export function DocumentCaptureStep() {
 	// Document capture runs at a higher resolution than liveness so the still
 	// image stays sharp enough for OCR (see capture-settings.ts). The video is
 	// kept small via the bitrate + frame-rate caps, not by lowering resolution.
+	const cameraAllowed = cameraActive && ready && (primerStatus === "granted" || primed);
+	// Sound on the clip. Answered before the camera opens, because a recording
+	// cannot gain a track once it has started. Refused costs the sound alone.
+	const wantsAudio = recordsDocumentAudio(config);
+	const microphone = useDocumentMicrophone(wantsAudio && cameraAllowed);
+	const microphoneRef = useRef(microphone.stream);
+	microphoneRef.current = microphone.stream;
 	const camera = useCamera({
 		facingMode: "environment",
-		enabled: cameraActive && ready && (primerStatus === "granted" || primed),
+		enabled: cameraAllowed && (!wantsAudio || microphone.settled),
 		resolution: {
 			width: DOCUMENT_CAPTURE_WIDTH,
 			height: DOCUMENT_CAPTURE_HEIGHT,
@@ -236,17 +290,43 @@ export function DocumentCaptureStep() {
 	// capture time so the shutter can crop to the guide the user framed against
 	// (see documentCropRect) instead of storing the whole sensor frame.
 	const viewportRef = useRef<HTMLDivElement | null>(null);
+	// A card, a squarer passport page or a longer NIN slip (lib/document-guide.ts),
+	// as the document itself is: landscape.
+	const documentAspect = documentGuideAspect(state.selectedIdType);
+	// On a tall camera view a long document is framed upright, turned a quarter
+	// clockwise, so it fills the screen's height (lib/document-turn.ts). A laptop
+	// webcam's landscape box keeps the landscape frame. The photo is turned back
+	// before it is stored, so everything after the camera sees a landscape slip.
+	const viewAspect = useViewAspect(viewportRef, viewfinderVisible);
+	const turned = viewAspect !== null && turnsDocument(documentAspect, viewAspect);
+	// The guide on screen, and the shape the detector and the gate look for.
+	const guideAspect =
+		viewAspect !== null ? onScreenGuideAspect(documentAspect, viewAspect) : documentAspect;
+	// The free band the full-screen overlay fitted an upright guide to, so the
+	// guide crop takes the rectangle that was drawn (documentGuideRect).
+	const guideBandRef = useRef<GuideBand | null>(null);
 	const detectionCanvasRef = useRef<HTMLCanvasElement | null>(null);
-	// Set once the guide's aspect is known (below): the fallback capture keeps
-	// the region under the guide, like the manual shutter.
-	const fallbackCropRef = useRef<
-		((frame: { width: number; height: number }) => CardBounds | null) | null
-	>(null);
+	// The corner gate judges corners against what the applicant can SEE: the
+	// preview is object-cover, so part of the frame is off screen.
+	// A laptop webcam also sees the person: a "document" that is mostly their
+	// face is refused (lib/face-in-document.ts). A rear camera skips this.
+	const faceRef = useFaceWatch({
+		videoRef: camera.videoRef,
+		active: cameraActive && camera.isReady && isFrontFacingStream(camera.stream),
+	});
 	const detection = useDocumentDetection({
 		videoRef: camera.videoRef,
 		canvasRef: detectionCanvasRef,
 		enabled: cameraActive && camera.isReady,
-		getFallbackCrop: (frame) => fallbackCropRef.current?.(frame) ?? null,
+		faceRef,
+		uprightDocument: turned,
+		getVisibleRegion: (frame) => {
+			const viewport = viewportRef.current;
+			return coverVisibleRegion(
+				frame,
+				viewport ? { width: viewport.clientWidth, height: viewport.clientHeight } : null,
+			);
+		},
 	});
 	const { compressDocument, isCompressing } = useImageCompress();
 	const { level: lightLevel } = useLightLevel(
@@ -294,17 +374,12 @@ export function DocumentCaptureStep() {
 		return () => setImmersiveCapture(false);
 	}, [immersive, setImmersiveCapture]);
 
-	// ID-1 cards use 1.586; passports use a taller 1.42 so the data page's MRZ
-	// band is not cropped off. Mirrors the native documentGuideAspect.
-	const guideAspect = state.selectedIdType === "passport" ? 1.42 : 85.6 / 53.98;
-	fallbackCropRef.current = (frame) => {
-		const viewport = viewportRef.current;
-		if (!viewport) return null;
-		return documentCropRect({
-			frame,
-			view: { width: viewport.clientWidth, height: viewport.clientHeight },
-			aspect: guideAspect,
-		});
+	const specimenCountry = state.selectedCountry ?? config.country ?? null;
+	const specimen: DocumentSpecimenSubject = {
+		idType: state.selectedIdType,
+		title: specimenTitle(state.selectedIdType, idTypeLabel),
+		country: specimenCountry ? regionCountryName(specimenCountry) : null,
+		side: phase === "back" ? "back" : "front",
 	};
 
 	// Auto-capture framing gate — the Flutter logic, fed from this SDK's edge
@@ -327,33 +402,48 @@ export function DocumentCaptureStep() {
 	});
 	const [dwell, setDwell] = useState(0);
 
-	// Feed the gate from the detector. `cardBounds` is in detection-canvas
-	// coordinates, so it is normalised against that canvas — the same frame the
-	// bounds were measured in.
+	// Feed the gate from the detector. `cardBounds` is in VIDEO pixels, so it is
+	// normalised against the video frame it was measured in (it used to be
+	// divided by the small detection canvas, which read every card as filling
+	// the frame many times over and always asked the applicant to move back).
 	useEffect(() => {
 		const gate = gateRef.current;
 		if (!gate || !cameraActive || !camera.isReady) return;
-		const canvas = detectionCanvasRef.current;
 		const box =
-			detection.cardBounds && canvas
-				? documentBoxFrom(detection.cardBounds, {
-						width: canvas.width,
-						height: canvas.height,
-					})
+			detection.cardBounds && detection.frameSize
+				? documentBoxFrom(detection.cardBounds, detection.frameSize)
 				: null;
 		// useLightLevel reports a band, not a luma; map it onto the gate's scale
 		// so a dark frame still produces the "move somewhere brighter" hint.
 		const brightness = lightLevel === "dark" ? 0.1 : 0.5;
-		setGuidance(gate.update(box, { brightness }));
+		const framing = gate.update(box, { brightness });
+		const { cornerProblem, detectorAvailable } = detection;
+		// While a corner is off screen or crowded, no photo can be taken, so the
+		// gate's steadiness count must not carry over to when it is fixed.
+		if (detectorAvailable && cornerProblem && cornerProblem !== "no_document" && !gate.hasFired) {
+			gate.reset();
+		}
+		setGuidance(withCornerGuidance(framing, cornerProblem, detectorAvailable));
 		setDwell(gate.progress(Date.now()));
 	}, [
 		detection.cardBounds,
+		detection.frameSize,
 		detection.isCardDetected,
 		detection.isStable,
+		detection.cornerProblem,
+		detection.detectorAvailable,
 		cameraActive,
 		camera.isReady,
 		lightLevel,
 	]);
+
+	// The shutter takes a photo only when the corner gate passes (all four
+	// corners in view, with room past them). When the detector cannot run on
+	// this device the shutter keeps its old guide crop so nobody is stranded.
+	const shutterBlocked = detection.detectorAvailable && detection.cornerProblem !== null;
+	const shutterBlockedReason = shutterBlocked
+		? documentHintText(CORNER_HINTS[detection.cornerProblem ?? "no_document"], idTypeLabel, t)
+		: null;
 
 	// Report a denied camera permission to onError once. Document capture still
 	// offers a gallery-upload fallback, so this is informational — the flow isn't
@@ -412,7 +502,7 @@ export function DocumentCaptureStep() {
 		if (!camera.stream) return;
 
 		docChunksRef.current = [];
-		const created = createVideoRecorder(camera.stream, DOCUMENT_VIDEO_BITRATE);
+		const created = createVideoRecorder(camera.stream, DOCUMENT_VIDEO_BITRATE, microphoneRef.current);
 		if (!created) return; // MediaRecorder not supported in this browser
 		const { recorder, mimeType } = created;
 		docMimeRef.current = mimeType;
@@ -499,7 +589,9 @@ export function DocumentCaptureStep() {
 			return;
 		}
 		const captured = detection.capturedImage;
-		const bounds = detection.cardBounds;
+		// The region the photo actually kept (corners plus bleed), so the zoom
+		// lands on exactly what was stored.
+		const bounds = detection.captureBounds;
 		// Snapshot the live frame BEFORE stopping the camera, so we can animate the
 		// crop-in (camera zooming onto the document) rather than hard-cutting to the
 		// tight cropped still. Falls back to an instant swap when we can't animate.
@@ -519,7 +611,7 @@ export function DocumentCaptureStep() {
 				captured,
 			});
 		} else {
-			storeCapture(captured);
+			storeCapture(captured, "camera");
 		}
 		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, [detection.capturedImage, lightLevel]);
@@ -529,7 +621,7 @@ export function DocumentCaptureStep() {
 		if (!captureZoom) return;
 		const captured = captureZoom.captured;
 		setCaptureZoom(null);
-		storeCapture(captured);
+		storeCapture(captured, "camera");
 		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, [captureZoom, phase, isTwoSided]);
 
@@ -537,19 +629,42 @@ export function DocumentCaptureStep() {
 	// Store a captured image for the current phase
 	// ---------------------------------------------------------------------------
 
-	function storeCapture(base64: string) {
+	function storeCapture(base64: string, source: "camera" | "upload") {
+		if (phase !== "front" && phase !== "back") return;
+		sourcesRef.current[phase] = source;
 		if (phase === "front") {
 			setFrontPreview(base64);
 			dispatch({ type: "SET_DOCUMENT_FRONT", payload: base64 });
-			setPhase(isTwoSided ? "front-preview" : "review");
-		} else if (phase === "back") {
+		} else {
 			setBackPreview(base64);
 			dispatch({ type: "SET_DOCUMENT_BACK", payload: base64 });
-			setPhase("review");
 		}
+		const next = afterDocumentCapture(config, {
+			side: phase,
+			twoSided: isTwoSided,
+			...sourcesRef.current,
+			hasBack: phase === "back" || !!backPreview,
+		});
+		if (next === "preview-front" || next === "scan-back") {
+			setPhase("front-preview");
+			// Nothing was tapped, so they are still holding up the front.
+			if (next === "scan-back") proceedToBack(FLIP_UNTAPPED_MS);
+			return;
+		}
+		setPhase("review");
+		setHandingOver(next === "hand-over");
 	}
 
-	function proceedToBack() {
+	function finishFlip() {
+		if (flipTimerRef.current) clearTimeout(flipTimerRef.current);
+		flipTimerRef.current = null;
+		setFlipCanSkip(false);
+		setShowFlipBanner(false);
+		setPhase("back");
+		detection.reset();
+	}
+
+	function proceedToBack(hold = FLIP_TAPPED_MS) {
 		if (backPreview) {
 			setPhase("review");
 			return;
@@ -561,11 +676,9 @@ export function DocumentCaptureStep() {
 			return;
 		}
 		setShowFlipBanner(true);
-		setTimeout(() => {
-			setShowFlipBanner(false);
-			setPhase("back");
-			detection.reset();
-		}, 1500);
+		setBackAnnounced(true);
+		setFlipCanSkip(hold === FLIP_UNTAPPED_MS);
+		flipTimerRef.current = setTimeout(finishFlip, hold);
 	}
 
 	// ---------------------------------------------------------------------------
@@ -609,7 +722,7 @@ export function DocumentCaptureStep() {
 			logCaptureSize("document still (cropped upload)", compressed);
 			setPauseForCrop(false);
 			setCropperSrc(null);
-			storeCapture(compressed);
+			storeCapture(compressed, "upload");
 		},
 		// eslint-disable-next-line react-hooks/exhaustive-deps
 		[compressDocument, phase, isTwoSided],
@@ -658,51 +771,35 @@ export function DocumentCaptureStep() {
 	const handleManualCapture = useCallback(async () => {
 		const video = camera.videoRef.current;
 		if (!video || video.readyState < video.HAVE_CURRENT_DATA) return;
+		const frame = { width: video.videoWidth, height: video.videoHeight };
 
-		// Store the region under the guide, not the whole frame. The preview is
-		// `object-cover`, so the user only ever saw a slice of the sensor frame —
-		// keeping all of it hands back a wider, zoomed-out photo with the document
-		// small and off-centre, which is not what they framed. Matches Flutter,
-		// which crops to the same rectangle after every shutter.
-		//
-		// Crop to the guide that was painted. Both layouts now draw the SAME
-		// rectangle (documentGuideRect), so there is one geometry to honour —
-		// the desktop view used to paint its own, which meant the crop had to
-		// carry a second rectangle just to match it.
-		const viewport = viewportRef.current;
-		const view =
-			viewport ?
-				{ width: viewport.clientWidth, height: viewport.clientHeight }
-			:	null;
-		const crop =
-			view ?
-				documentCropRect({
-					frame: { width: video.videoWidth, height: video.videoHeight },
-					view,
-					aspect: guideAspect,
-				})
-			:	null;
-
-		const canvas = document.createElement("canvas");
-		canvas.width = crop ? crop.width : video.videoWidth;
-		canvas.height = crop ? crop.height : video.videoHeight;
-		const ctx = canvas.getContext("2d");
-		if (crop) {
-			ctx?.drawImage(
-				video,
-				crop.x,
-				crop.y,
-				crop.width,
-				crop.height,
-				0,
-				0,
-				crop.width,
-				crop.height,
-			);
+		// With the detector running, the shutter keeps the same region the
+		// auto-capture would: the detected corners plus the bleed past them, so
+		// the photo never cuts a corner (or a passport's MRZ). It does nothing
+		// until the corners pass; the button says why.
+		let crop: ReturnType<typeof documentCropRect> = null;
+		if (detection.detectorAvailable) {
+			const quad = detection.getPassingQuad();
+			if (!quad) return;
+			crop = bleedCropRect(quad, frame);
 		} else {
-			ctx?.drawImage(video, 0, 0);
+			// The detector cannot run here: store the region under the guide,
+			// not the whole frame. The preview is `object-cover`, so the user only
+			// saw a slice of the sensor frame; keeping all of it hands back a
+			// wider, zoomed-out photo than the one they framed.
+			const viewport = viewportRef.current;
+			crop = viewport
+				? documentCropRect({
+						frame,
+						view: { width: viewport.clientWidth, height: viewport.clientHeight },
+						aspect: guideAspect,
+						band: immersive ? guideBandRef.current : null,
+					})
+				: null;
 		}
-		const raw = canvas.toDataURL("image/jpeg", DOCUMENT_IMAGE_QUALITY);
+		// An upright slip is turned back to landscape before it is stored.
+		const raw = cropVideoFrame(video, crop, { turnBack: turned });
+		if (!raw) return;
 
 		const compressed = await compressDocument(raw);
 		logCaptureSize("document still (manual)", compressed);
@@ -710,7 +807,7 @@ export function DocumentCaptureStep() {
 		camera.stop();
 		detection.reset();
 		setUploadError(null);
-		storeCapture(compressed);
+		storeCapture(compressed, "camera");
 		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, [
 		camera,
@@ -721,6 +818,7 @@ export function DocumentCaptureStep() {
 		stopDocRecorder,
 		immersive,
 		guideAspect,
+		turned,
 	]);
 
 	// ---------------------------------------------------------------------------
@@ -835,11 +933,25 @@ export function DocumentCaptureStep() {
 		advance,
 	]);
 
+	// The scan that just landed uploads with no Continue to press. Once per
+	// capture: the review's own buttons take over if this one needs them.
+	useEffect(() => {
+		if (!handingOver || phase !== "review" || handoverStartedRef.current) return;
+		handoverStartedRef.current = true;
+		void handleContinue();
+	}, [handingOver, phase, handleContinue]);
+
 	// ---------------------------------------------------------------------------
 	// Retake helpers
 	// ---------------------------------------------------------------------------
 
+	const stopHandover = () => {
+		setHandingOver(false);
+		handoverStartedRef.current = false;
+	};
+
 	const retakeFront = () => {
+		stopHandover();
 		clearCaptureCheck();
 		stopDocRecorder(false);
 		setCaptureZoom(null);
@@ -854,6 +966,7 @@ export function DocumentCaptureStep() {
 	};
 
 	const retakeBack = () => {
+		stopHandover();
 		clearCaptureCheck();
 		stopDocRecorder(false);
 		setCaptureZoom(null);
@@ -877,6 +990,11 @@ export function DocumentCaptureStep() {
 	// ---------------------------------------------------------------------------
 
 	const isBusy = isCompressing || isUploading;
+
+	// A problem brings the review back: that is where its Retake and Try Again
+	// live.
+	const showHandover =
+		handingOver && phase === "review" && !uploadError && !captureProblems?.length;
 
 	// The gallery fallback is normally gated by `allowDocumentUpload`, but it's
 	// always offered on the camera-permission-denied screen as an escape hatch so
@@ -936,6 +1054,8 @@ export function DocumentCaptureStep() {
 	// Render
 	// ---------------------------------------------------------------------------
 
+	if (showHandover) return <DocumentHandover retryInfo={retryInfo} />;
+
 	if (cropperSrc) {
 		const cancelCrop = () => {
 			setCropperSrc(null);
@@ -952,6 +1072,7 @@ export function DocumentCaptureStep() {
 				/>
 				<ImageCropper
 					src={cropperSrc}
+					aspect={documentAspect}
 					onConfirm={handleCropConfirm}
 					onCancel={cancelCrop}
 				/>
@@ -1019,12 +1140,16 @@ export function DocumentCaptureStep() {
 			</div>
 			)}
 
-			{/* Flip banner */}
+			{/* The document turning over */}
 			{showFlipBanner && (
-				<div className='flex items-center justify-center gap-2 rounded-lg border border-primary/30 bg-primary/10 px-4 py-3 text-sm font-medium text-primary animate-fade-in'>
-					<CreditCard className='h-4 w-4 animate-card-flip' />
-					{t("uploadDocument.flipBanner")}
-				</div>
+				<TurnOverPrompt
+					message={t("uploadDocument.flipBanner")}
+					doneLabel={flipCanSkip ? t("uploadDocument.flipDone") : null}
+					aspect={documentAspect}
+					accent={config.appearance?.primaryColor ?? "#5645F5"}
+					subject={specimen}
+					onDone={finishFlip}
+				/>
 			)}
 
 			{/* Hidden file input */}
@@ -1039,7 +1164,7 @@ export function DocumentCaptureStep() {
 			{/* ------------------------------------------------------------------ */}
 			{/* Front preview                                                        */}
 			{/* ------------------------------------------------------------------ */}
-			{phase === "front-preview" && (
+			{phase === "front-preview" && !(showFlipBanner && config.documentReview !== true) && (
 				<div className='space-y-4'>
 					{/* Capped for the same reason as the review preview: at natural
 					    aspect a document fills a desktop modal and pushes Retake and
@@ -1064,7 +1189,7 @@ export function DocumentCaptureStep() {
 						</Button>
 						<Button
 							className='flex-1 gap-2'
-							onClick={proceedToBack}
+							onClick={() => proceedToBack()}
 							disabled={isBusy}>
 							{t(
 								backPreview ? "uploadDocument.frontPreview.continueToReview"
@@ -1197,15 +1322,16 @@ export function DocumentCaptureStep() {
 							<InlineOverlay
 								side={phase === "back" ? "back" : "front"}
 								documentLabel={shortDocumentLabel(state.selectedIdType, idTypeLabel)}
-								showMrzBand={state.selectedIdType === "passport"}
+								specimen={specimen}
+								showSpecimen={!(phase === "back" && backAnnounced)}
 								country={state.selectedCountry ?? config.country ?? null}
 								guideAspect={guideAspect}
 								framing={guidance.framing}
 								progress={dwell}
 								hint={documentHintText(guidance.hint, idTypeLabel, t)}
 								busy={isCompressing}
-								mirrored={mirrorPreview}
 								onCapture={handleManualCapture}
+								shutterBlockedReason={shutterBlockedReason}
 								primaryColor={config.appearance?.primaryColor ?? "#5645F5"}
 							/>
 						)}
@@ -1214,20 +1340,24 @@ export function DocumentCaptureStep() {
 							<ImmersiveOverlay
 								side={phase === "back" ? "back" : "front"}
 								documentLabel={shortDocumentLabel(state.selectedIdType, idTypeLabel)}
-								showMrzBand={state.selectedIdType === "passport"}
+								specimen={specimen}
+								showSpecimen={!(phase === "back" && backAnnounced)}
 								country={state.selectedCountry ?? config.country ?? null}
 								guideAspect={guideAspect}
 								framing={guidance.framing}
 								progress={dwell}
 								hint={documentHintText(guidance.hint, idTypeLabel, t)}
 								busy={isCompressing}
-								mirrored={mirrorPreview}
 								torch={torch.torch}
 								hasTorch={torch.hasTorch}
 								onToggleTorch={torch.toggleTorch}
 								onCapture={handleManualCapture}
+								shutterBlockedReason={shutterBlockedReason}
 								onBack={handleBack}
 								onUpload={allowUpload ? openUpload : null}
+								onGuideBand={(band) => {
+									guideBandRef.current = band;
+								}}
 								// The canvas cannot read a CSS variable, so the resolved brand
 								// colour is passed in. Falls back to the SDK default.
 								primaryColor={config.appearance?.primaryColor ?? "#5645F5"}

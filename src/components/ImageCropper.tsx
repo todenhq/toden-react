@@ -7,7 +7,7 @@ import { cn } from '../lib/utils';
 import { useText } from '../i18n';
 
 // ISO/IEC 7810 ID-1 standard dimensions: 85.6 mm × 53.98 mm
-const ID_ASPECT_RATIO = 85.6 / 53.98; // ≈ 1.5858
+export const ID_ASPECT_RATIO = 85.6 / 53.98; // ≈ 1.5858
 
 type DragType = 'move' | 'resize-tl' | 'resize-tr' | 'resize-bl' | 'resize-br';
 
@@ -24,25 +24,25 @@ interface ImgBounds {
   height: number;
 }
 
-function getHeight(width: number): number {
-  return width / ID_ASPECT_RATIO;
+function getHeight(width: number, aspect: number): number {
+  return width / aspect;
 }
 
-function clampCropBox(box: CropBox, bounds: ImgBounds): CropBox {
+function clampCropBox(box: CropBox, bounds: ImgBounds, aspect: number): CropBox {
   let { x, y, width } = box;
 
   // Keep a sensible minimum size
   width = Math.max(60, width);
 
   // Shrink width if the resulting height would exceed the image area
-  if (getHeight(width) > bounds.height) {
-    width = bounds.height * ID_ASPECT_RATIO;
+  if (getHeight(width, aspect) > bounds.height) {
+    width = bounds.height * aspect;
   }
 
   // Don't let width exceed the image width
   width = Math.min(width, bounds.width);
 
-  const h = getHeight(width);
+  const h = getHeight(width, aspect);
   x = Math.max(bounds.x, Math.min(x, bounds.x + bounds.width - width));
   y = Math.max(bounds.y, Math.min(y, bounds.y + bounds.height - h));
 
@@ -55,9 +55,11 @@ export interface ImageCropperProps {
   /** Called with the cropped image as a JPEG data-URI */
   onConfirm: (croppedBase64: string) => void;
   onCancel: () => void;
+  /** Width over height of the crop box. Defaults to an ID card; a NIN slip is longer. */
+  aspect?: number;
 }
 
-export function ImageCropper({ src, onConfirm, onCancel }: ImageCropperProps) {
+export function ImageCropper({ src, onConfirm, onCancel, aspect = ID_ASPECT_RATIO }: ImageCropperProps) {
   const t = useText();
   const containerRef = useRef<HTMLDivElement>(null);
   const imgRef = useRef<HTMLImageElement>(null);
@@ -118,10 +120,10 @@ export function ImageCropper({ src, onConfirm, onCancel }: ImageCropperProps) {
       // Set initial crop box: 85% of image width, centered
       initializedRef.current = true;
       let cropW = bounds.width * 0.85;
-      if (getHeight(cropW) > bounds.height * 0.9) {
-        cropW = bounds.height * 0.9 * ID_ASPECT_RATIO;
+      if (getHeight(cropW, aspect) > bounds.height * 0.9) {
+        cropW = bounds.height * 0.9 * aspect;
       }
-      const cropH = getHeight(cropW);
+      const cropH = getHeight(cropW, aspect);
       setCropBox({
         x: bounds.x + (bounds.width - cropW) / 2,
         y: bounds.y + (bounds.height - cropH) / 2,
@@ -129,9 +131,9 @@ export function ImageCropper({ src, onConfirm, onCancel }: ImageCropperProps) {
       });
     } else {
       // Clamp existing box to updated bounds
-      setCropBox((prev) => (prev ? clampCropBox(prev, bounds) : null));
+      setCropBox((prev) => (prev ? clampCropBox(prev, bounds, aspect) : null));
     }
-  }, []);
+  }, [aspect]);
 
   useEffect(() => {
     const img = imgRef.current;
@@ -174,7 +176,7 @@ export function ImageCropper({ src, onConfirm, onCancel }: ImageCropperProps) {
     const dx = e.clientX - startClientX;
     const dy = e.clientY - startClientY;
 
-    const startH = getHeight(startBox.width);
+    const startH = getHeight(startBox.width, aspect);
     const bottomEdge = startBox.y + startH;
 
     let newBox: CropBox;
@@ -196,13 +198,13 @@ export function ImageCropper({ src, onConfirm, onCancel }: ImageCropperProps) {
 
       case 'resize-tr': {
         const w = startBox.width + dx;
-        newBox = { x: startBox.x, y: bottomEdge - getHeight(w), width: w };
+        newBox = { x: startBox.x, y: bottomEdge - getHeight(w, aspect), width: w };
         break;
       }
 
       case 'resize-tl': {
         const w = startBox.width - dx;
-        newBox = { x: startBox.x + dx, y: bottomEdge - getHeight(w), width: w };
+        newBox = { x: startBox.x + dx, y: bottomEdge - getHeight(w, aspect), width: w };
         break;
       }
 
@@ -210,7 +212,7 @@ export function ImageCropper({ src, onConfirm, onCancel }: ImageCropperProps) {
         return;
     }
 
-    setCropBox(clampCropBox(newBox, imgBoundsRef.current));
+    setCropBox(clampCropBox(newBox, imgBoundsRef.current, aspect));
   };
 
   const handlePointerUp = () => {
@@ -231,7 +233,7 @@ export function ImageCropper({ src, onConfirm, onCancel }: ImageCropperProps) {
     const sx = (cropBox.x - imgBounds.x) * scaleX;
     const sy = (cropBox.y - imgBounds.y) * scaleY;
     const sw = cropBox.width * scaleX;
-    const sh = getHeight(cropBox.width) * scaleY;
+    const sh = getHeight(cropBox.width, aspect) * scaleY;
 
     const canvas = document.createElement('canvas');
     canvas.width = Math.round(sw);
@@ -242,7 +244,7 @@ export function ImageCropper({ src, onConfirm, onCancel }: ImageCropperProps) {
     onConfirm(canvas.toDataURL('image/jpeg', 0.92));
   };
 
-  const cropH = cropBox ? getHeight(cropBox.width) : 0;
+  const cropH = cropBox ? getHeight(cropBox.width, aspect) : 0;
 
   // ---------------------------------------------------------------------------
   // Render

@@ -94,6 +94,31 @@ describe('DocumentFramingGate', () => {
   });
 });
 
+describe('DocumentFramingGate with an upright guide', () => {
+  // A NIN slip turned upright on a tall screen (lib/document-turn.ts).
+  const UPRIGHT = 1 / 2.07;
+
+  it('accepts the slip turned upright', () => {
+    const gate = new DocumentFramingGate({ expectedAspect: UPRIGHT });
+    expect(gate.matchesShape(goodBox({ aspectRatio: UPRIGHT }))).toBe(true);
+  });
+
+  it('accepts exactly the shapes the landscape guide would, turned', () => {
+    const landscape = new DocumentFramingGate({ expectedAspect: 2.07 });
+    const upright = new DocumentFramingGate({ expectedAspect: UPRIGHT });
+    for (const ratio of [1.3, 1.5, 1.6, 2.07, 2.5, 2.7, 3]) {
+      expect(upright.matchesShape(goodBox({ aspectRatio: 1 / ratio }))).toBe(
+        landscape.matchesShape(goodBox({ aspectRatio: ratio })),
+      );
+    }
+  });
+
+  it('refuses a landscape card while expecting an upright slip', () => {
+    const gate = new DocumentFramingGate({ expectedAspect: UPRIGHT });
+    expect(gate.update(goodBox()).framing).toBe('wrongShape');
+  });
+});
+
 describe('documentBoxFrom', () => {
   it('normalises pixel bounds into the shares the gate judges', () => {
     const box = documentBoxFrom(

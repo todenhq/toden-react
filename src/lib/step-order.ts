@@ -45,7 +45,12 @@ export interface StepOrderOptions {
    * Search depends on the server config, entrance on capture modes + the
    * in-document Google key — both known at mount, both stable within it.
    */
-  addressFlow?: { search: boolean; entrance: boolean };
+  addressFlow?: {
+    search: boolean;
+    entrance: boolean;
+    /** A saved address was picked: the capture steps are not walked. */
+    reused?: boolean;
+  };
   hasQuestionnaire: boolean;
   /**
    * A reviewer sent this back to redo specific steps.
@@ -120,27 +125,23 @@ export function resolveNarrowedStep(step: VerificationStep, o: StepOrderOptions)
   return step;
 }
 
+/** The address flow's own steps: search (when offered), pin, entrance (when offered), review. */
+function addressSteps(o: StepOrderOptions): VerificationStep[] {
+  // A picked saved address stands in for the capture steps.
+  if (o.addressFlow?.reused) return ['address-book'];
+  return [
+    ...(o.addressFlow?.search ? (['address-search'] as VerificationStep[]) : []),
+    'address-collection',
+    ...(o.addressFlow?.entrance ? (['address-entrance'] as VerificationStep[]) : []),
+    'address-review',
+  ];
+}
+
 /** The flow as configured, before any reviewer narrowing. */
 function fullStepOrder(o: StepOrderOptions): VerificationStep[] {
-  // Business (KYB) flow — the application section, then (when the workflow
-  // requires applicant verification) the ordinary individual capture leg.
-  if (o.isBusiness) {
-    // The questionnaire sits INSIDE the business section (before key people) —
-    // its questions are about the company, so it stays with the company form
-    // rather than trailing the applicant's own capture leg.
-    const steps: VerificationStep[] = [
-      ...openingSteps(o),
-      ...contactSteps(o),
-      ...businessSectionSteps(o.business, o.hasQuestionnaire, o.hasAddressCollection),
-    ];
-    if (hasApplicantVerification(o.business)) {
-      steps.push('id-type', o.hasDocCapture ? 'document-capture' : 'id-input');
-      if (o.hasLiveness) steps.push('liveness');
-    }
-    steps.push('submitted');
-    return steps;
-  }
-  // Scoped flows: the scope's headline section IS the flow.
+  // Scoped flows: the scope's headline section IS the flow, whoever it is
+  // about. A scoped BUSINESS workflow (address, questionnaire, contact) runs
+  // these steps and never the KYB application below.
   if (o.scope === 'address') {
     const steps: VerificationStep[] = [...openingSteps(o), ...contactSteps(o)];
     if (o.hasPoa) steps.push('proof-of-address');
@@ -149,12 +150,7 @@ function fullStepOrder(o: StepOrderOptions): VerificationStep[] {
     // map, so these are gated exactly as they are on the full flow below
     // (Flutter has always gated them; web and RN pushed them unconditionally,
     // which made a proof-of-address-only address flow unwalkable).
-    if (o.hasAddressCollection) {
-      if (o.addressFlow?.search) steps.push('address-search');
-      steps.push('address-collection');
-      if (o.addressFlow?.entrance) steps.push('address-entrance');
-      steps.push('address-review');
-    }
+    if (o.hasAddressCollection) steps.push(...addressSteps(o));
     if (o.hasQuestionnaire) steps.push('questionnaire');
     steps.push('submitted');
     return steps;
@@ -171,18 +167,35 @@ function fullStepOrder(o: StepOrderOptions): VerificationStep[] {
   if (o.scope === 'contact') {
     return [...openingSteps(o), ...contactSteps(o), 'submitted'];
   }
+  // Business (KYB) flow — the application section, then (when the workflow
+  // requires applicant verification) the ordinary individual capture leg.
+  if (o.isBusiness) {
+    // The questionnaire sits INSIDE the business section (before key people) —
+    // its questions are about the company, so it stays with the company form
+    // rather than trailing the applicant's own capture leg.
+    const steps: VerificationStep[] = [
+      ...openingSteps(o),
+      ...contactSteps(o),
+      // The premises address is one unit in the business section; here it
+      // expands into its own steps, as on a person's flow.
+      ...businessSectionSteps(o.business, o.hasQuestionnaire, o.hasAddressCollection).flatMap((s) =>
+        s === 'address-collection' ? addressSteps(o) : [s],
+      ),
+    ];
+    if (hasApplicantVerification(o.business)) {
+      steps.push('id-type', o.hasDocCapture ? 'document-capture' : 'id-input');
+      if (o.hasLiveness) steps.push('liveness');
+    }
+    steps.push('submitted');
+    return steps;
+  }
   const middle: VerificationStep[] = [o.hasDocCapture ? 'document-capture' : 'id-input'];
   if (o.hasLiveness) middle.push('liveness');
   // Paperwork the org files comes BEFORE the address evidence the
   // verification is judged on (user decision 2026-09-22).
   if (o.hasSupportingDocuments) middle.push('supporting-documents');
   if (o.hasPoa) middle.push('proof-of-address');
-  if (o.hasAddressCollection) {
-    if (o.addressFlow?.search) middle.push('address-search');
-    middle.push('address-collection');
-    if (o.addressFlow?.entrance) middle.push('address-entrance');
-    middle.push('address-review');
-  }
+  if (o.hasAddressCollection) middle.push(...addressSteps(o));
   if (o.hasQuestionnaire) middle.push('questionnaire');
   return [
     ...openingSteps(o),

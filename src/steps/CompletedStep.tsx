@@ -13,6 +13,8 @@ import { useText } from '../i18n';
 import { PresenceExpectations } from './presence-expectations';
 import { showsPresencePromise } from '../lib/presence-promise';
 import type { AwaitingPersonPayload } from '../services/api';
+import { KeyPeopleOwnershipNote } from './KeyPeopleOwnershipNote';
+import { summaryOwnershipPending } from '../lib/ownership-pending';
 
 // The success screen as an applicant sees it when they come BACK to their link.
 //
@@ -41,6 +43,7 @@ export function toAwaitRows(people: AwaitingPersonPayload[]): AwaitRow[] {
     ...(p.inviteUrl ? { inviteUrl: p.inviteUrl } : {}),
     isApplicant: p.isApplicant,
     isCorporate: p.isCorporate ?? false,
+    foundInDocuments: p.foundInDocuments ?? false,
   }));
 }
 
@@ -94,6 +97,11 @@ export function CompletedStep() {
             showsPresencePromise(config) &&
             summary?.addressCollected === true && <PresenceExpectations />}
           {rows.length > 0 && <KeyPeopleAwaitList rows={rows} />}
+          {/* Shareholders a slow register sends late: their rows and links
+              arrive through the re-reads HostedCompleted keeps running. */}
+          {(!decided || decided.tone === 'success') && summaryOwnershipPending(summary) && (
+            <KeyPeopleOwnershipNote where="submitted" />
+          )}
         </>
       }
       action={successAction({

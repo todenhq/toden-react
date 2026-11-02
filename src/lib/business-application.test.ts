@@ -41,10 +41,10 @@ describe('step gates', () => {
 describe('resolveBusinessDocumentTypes', () => {
   it('defaults to a required incorporation certificate when types absent/empty', () => {
     expect(resolveBusinessDocumentTypes({ ...base, documents: { enabled: true } })).toEqual([
-      { key: 'incorporation_certificate', label: 'Certificate of incorporation', required: true },
+      { key: 'incorporation_certificate', label: 'Certificate of incorporation', required: true, maxAgeMonths: null },
     ]);
     expect(resolveBusinessDocumentTypes({ ...base, documents: { enabled: true, types: [] } })).toEqual([
-      { key: 'incorporation_certificate', label: 'Certificate of incorporation', required: true },
+      { key: 'incorporation_certificate', label: 'Certificate of incorporation', required: true, maxAgeMonths: null },
     ]);
   });
 
@@ -60,8 +60,8 @@ describe('resolveBusinessDocumentTypes', () => {
       },
     });
     expect(types).toEqual([
-      { key: 'memart', label: 'MEMART / articles of association', required: true },
-      { key: 'tax_document', label: 'TIN certificate', required: false },
+      { key: 'memart', label: 'Memorandum and articles / company constitution', required: true, maxAgeMonths: null },
+      { key: 'tax_document', label: 'TIN certificate', required: false, maxAgeMonths: null },
     ]);
   });
 

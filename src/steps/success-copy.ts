@@ -3,6 +3,7 @@ import type { SubmitSuccessAction } from './SubmittedScreens';
 import type { VerificationSuccessContent } from '../types/config';
 import type { WorkflowScope } from '../lib/scope';
 import { defaultText } from '../i18n/translate';
+import { businessKey } from '../i18n/business-variants';
 import type { TextFn } from '../i18n/types';
 
 // The success screen's words and its terminal affordance, in one place.
@@ -48,9 +49,13 @@ export function successDescription(
   scope?: WorkflowScope | null,
   t: TextFn = defaultText,
 ): string {
-  const key =
-    (scope && SCOPE_DESCRIPTION_KEYS[scope]) ||
-    (isBusiness ? 'result.success.description.business' : 'result.success.description.individual');
+  // A scoped business workflow names the business in its scope's line.
+  const scoped = scope && SCOPE_DESCRIPTION_KEYS[scope];
+  const key = scoped
+    ? businessKey(scoped, isBusiness)
+    : isBusiness
+      ? 'result.success.description.business'
+      : 'result.success.description.individual';
   return t(key, tokenVars(tokens), success?.description);
 }
 

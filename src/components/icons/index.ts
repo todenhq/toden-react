@@ -39,6 +39,7 @@ import {
   House as HugeHouse,
   IdentityCardIcon as HugeIdentityCardIcon,
   ImageUp as HugeImageUp,
+  Mic01Icon as HugeMic01Icon,
   Info as HugeInfo,
   LandmarkIcon as HugeLandmarkIcon,
   Link2 as HugeLink2,
@@ -48,8 +49,6 @@ import {
   MailIcon as HugeMailIcon,
   MapPinCheck as HugeMapPinCheck,
   MapPinHouseIcon as HugeMapPinHouseIcon,
-  MapPinIcon as HugeMapPinIcon,
-  MapPinned as HugeMapPinned,
   MessageSquare as HugeMessageSquare,
   Minus as HugeMinus,
   Monitor as HugeMonitor,
@@ -133,6 +132,7 @@ export const CircleHelp = createAppIcon(HugeHelpCircleIcon, 'CircleHelp');
 export const House = createAppIcon(HugeHouse, 'House');
 export const IdCard = createAppIcon(HugeIdentityCardIcon, 'IdCard');
 export const ImageUp = createAppIcon(HugeImageUp, 'ImageUp');
+export const Mic = createAppIcon(HugeMic01Icon, 'Mic');
 export const Info = createAppIcon(HugeInfo, 'Info');
 export const Landmark = createAppIcon(HugeLandmarkIcon, 'Landmark');
 export const Link2 = createAppIcon(HugeLink2, 'Link2');
@@ -140,10 +140,11 @@ export const Loader2 = createAppIcon(HugeLoading02Icon, 'Loader2');
 export const LocateFixed = createAppIcon(HugeLocateFixed, 'LocateFixed');
 export const Lock = createAppIcon(HugeLockIcon, 'Lock');
 export const Mail = createAppIcon(HugeMailIcon, 'Mail');
-export const MapPin = createAppIcon(HugeMapPinIcon, 'MapPin');
+// One location icon everywhere: the pin with a house. Both names draw it.
+export const MapPin = createAppIcon(HugeMapPinHouseIcon, 'MapPin');
 export const MapPinCheck = createAppIcon(HugeMapPinCheck, 'MapPinCheck');
 export const MapPinHouse = createAppIcon(HugeMapPinHouseIcon, 'MapPinHouse');
-export const MapPinned = createAppIcon(HugeMapPinned, 'MapPinned');
+export const MapPinned = createAppIcon(HugeMapPinHouseIcon, 'MapPinned');
 // The fullscreen toggle. Hugeicons' own `Maximize2`/`Minimize2` aliases
 // resolve to Maximize02Icon/Minimize02Icon, which in this set are PINCH
 // GESTURE glyphs (a hand), not the corner arrows Lucide's names describe.

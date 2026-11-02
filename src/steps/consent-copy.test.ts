@@ -1,6 +1,18 @@
 import { describe, expect, it } from 'vitest';
 import { createTextFn } from '../i18n/translate';
-import { consentDescription, consentTitle } from './consent-copy';
+import { consentDescription, consentProcessSteps, consentTitle } from './consent-copy';
+import type { VerificationConfigValue } from '../context/VerificationConfigContext';
+
+describe('recording sound on the consent screen', () => {
+  it('is not listed, whichever recording is on', () => {
+    const labels = (scope: string | null) =>
+      consentProcessSteps({ documentAudio: true, livenessAudio: true } as VerificationConfigValue, { isBusiness: false, scope })
+        .map((step) => step.label)
+        .join(' ');
+    expect(labels(null)).not.toMatch(/sound/i);
+    expect(labels('biometric-authentication')).not.toMatch(/sound/i);
+  });
+});
 
 describe('consent copy', () => {
   const t = createTextFn(undefined, undefined, { firstName: 'Ada' });

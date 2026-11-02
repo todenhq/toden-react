@@ -16,6 +16,7 @@ import {
   MapPinHouse,
 } from '../components/icons';
 import { defaultText } from '../i18n/translate';
+import { businessKey } from '../i18n/business-variants';
 import type { TextFn } from '../i18n/types';
 import { hasEmailVerificationStep, hasPhoneVerificationStep } from '../lib/contact-steps';
 import { hasActiveQuestionnaire } from '../lib/questionnaire';
@@ -44,14 +45,21 @@ const SCOPE_KEYS: Record<string, string> = {
 };
 
 interface CopyCase {
+  /** The KYB application flow (lib/business.ts isBusinessFlow). */
   isBusiness: boolean;
   scope: string | null;
+  /**
+   * A SCOPED workflow about a business (lib/scope.ts isScopedBusiness): the
+   * scope's own screens, worded for the company. Absent = a person.
+   */
+  scopedBusiness?: boolean;
 }
 
 /** The screen's variant for keyed copy: business, a scope, or none (the base text). */
-function variant({ isBusiness, scope }: CopyCase): string | null {
+function variant({ isBusiness, scope, scopedBusiness }: CopyCase): string | null {
   if (isBusiness) return 'business';
-  return SCOPE_KEYS[scope ?? ''] ?? null;
+  const key = SCOPE_KEYS[scope ?? ''] ?? null;
+  return key && scopedBusiness ? `${key}.business` : key;
 }
 
 /**
@@ -77,8 +85,11 @@ export function consentDescription(c: CopyCase & { legacy?: string | null }, t: 
  * the real flow.
  */
 export function consentProcessSteps(config: VerificationConfigValue, c: CopyCase, t: TextFn = defaultText): ProcessStep[] {
-  const { isBusiness, scope } = c;
-  const step = (icon: ProcessStep['icon'], key: string): ProcessStep => ({ icon, label: t(key) });
+  const { isBusiness, scope, scopedBusiness } = c;
+  const step = (icon: ProcessStep['icon'], key: string): ProcessStep => ({
+    icon,
+    label: t(businessKey(key, scopedBusiness)),
+  });
   // The address scope's bullets are NOT a fixed pair: it verifies an address by
   // the pin, by a document, or by both, so promising a map on a flow that only
   // asks for a document is a promise the flow never keeps. The document's own

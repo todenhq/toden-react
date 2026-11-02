@@ -14,8 +14,6 @@
 //     shot. A document cropped flush to a corner loses characters.
 //   • STABILITY — held steady for a dwell, so the shot isn't taken mid-move.
 
-import { defaultText } from '../i18n/translate';
-import type { TextFn } from '../i18n/types';
 
 /**
  * What to actually tell the user. The gate rejects for several distinct
@@ -32,7 +30,14 @@ export type DocumentHint =
   | 'centre'
   | 'showMrz'
   | 'holdStill'
-  | 'captured';
+  | 'captured'
+  // The corner gate (document-corners.ts): nothing found, a corner off the
+  // edge, or no room past a corner. See document-hints.ts.
+  | 'placeDocument'
+  | 'fitCorners'
+  | 'spaceAround'
+  // The box found is the person's face, not a document (lib/face-in-document.ts).
+  | 'faceNotDocument';
 
 export type DocumentFraming =
   /** Nothing document-shaped in the frame. */
@@ -143,10 +148,17 @@ export class DocumentFramingGate {
     return Math.min(1, Math.max(0, (now - this.heldSince) / this.o.dwellMs));
   }
 
-  /** True when the detected shape is plausibly this document type. */
+  /**
+   * True when the detected shape is plausibly this document type. An upright
+   * guide (a long document turned on a tall screen, lib/document-turn.ts) is
+   * judged turned back, so its tolerance accepts exactly the shapes the
+   * landscape guide would.
+   */
   matchesShape(box: DocumentBox): boolean {
-    const delta = Math.abs(box.aspectRatio - this.o.expectedAspect);
-    return delta <= this.o.expectedAspect * this.o.aspectTolerance;
+    const upright = this.o.expectedAspect < 1;
+    const expected = upright ? 1 / this.o.expectedAspect : this.o.expectedAspect;
+    const actual = upright ? 1 / box.aspectRatio : box.aspectRatio;
+    return Math.abs(actual - expected) <= expected * this.o.aspectTolerance;
   }
 
   /** Feeds one frame. `brightness` is the frame's mean luma (0..1). */
@@ -216,23 +228,5 @@ export class DocumentFramingGate {
   }
 }
 
-const HINT_KEYS: Record<DocumentHint, string> = {
-  searching: 'uploadDocument.hint.searching',
-  moreLight: 'uploadDocument.hint.moreLight',
-  wrongDocument: 'uploadDocument.hint.wrongDocument',
-  moveCloser: 'uploadDocument.hint.moveCloser',
-  moveBack: 'uploadDocument.hint.moveBack',
-  centre: 'uploadDocument.hint.centre',
-  showMrz: 'uploadDocument.hint.showMrz',
-  holdStill: 'uploadDocument.hint.holdStill',
-  captured: 'uploadDocument.hint.captured',
-};
-
-/** User-facing instruction for each hint, from the text catalogue. */
-export function documentHintText(
-  hint: DocumentHint,
-  documentLabel: string,
-  t: TextFn = defaultText,
-): string {
-  return t(HINT_KEYS[hint] ?? HINT_KEYS.searching, { document: documentLabel });
-}
+// The hint wording lives in document-hints.ts, beside the corner gate's.
+export { documentHintText } from './document-hints';

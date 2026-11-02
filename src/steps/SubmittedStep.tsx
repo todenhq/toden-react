@@ -1,6 +1,6 @@
 "use client";
 
-import { configScope, SCOPE_ID_TYPES } from '../lib/scope';
+import { configScope, isScopedBusiness, SCOPE_ID_TYPES } from '../lib/scope';
 import { useEffect, useRef, useState } from "react";
 import { useVerificationContext } from "../context/VerificationContext";
 import { useVerificationConfig } from "../context/VerificationConfigContext";
@@ -27,11 +27,12 @@ import { KeyPeopleAwaitList } from "./KeyPeopleAwaitList";
 import { toAwaitRows } from "./CompletedStep";
 import { KeyPeoplePending } from "./KeyPeoplePending";
 import { useAwaitingPeople } from "./use-awaiting-people";
+import { KeyPeopleOwnershipNote } from "./KeyPeopleOwnershipNote";
 import { successAction, successDescription, successTitle } from "./success-copy";
 import { PresenceExpectations } from "./presence-expectations";
 import { showsPresencePromise } from "../lib/presence-promise";
 import { SubmittingScreen, SubmitErrorScreen, SubmitSuccessScreen } from "./SubmittedScreens";
-import { requiredPrefillSubmission } from './address/address-field-modes';
+import { addressSubmission } from './address-submission';
 import { describeWaiting } from '../lib/result-copy';
 import { biometricCopyFor } from '../lib/biometric-copy';
 import { showsDoneButton, showsSelfieReview, waitsForResult } from '../lib/biometric-options';
@@ -70,7 +71,7 @@ export function SubmittedStep({ stepOrder = [] }: { stepOrder?: readonly Verific
 	// the server reports it has finished: discovery can add people the applicant
 	// never listed and fill in ownership they did not know, and a list shown before
 	// that is one a refresh would contradict.
-	const settled = useAwaitingPeople(
+	const { people: settled, ownershipPending } = useAwaitingPeople(
 		config.api,
 		{ token: config.hostedToken, sessionId: state.sessionId },
 		state.status === "success",
@@ -245,61 +246,12 @@ export function SubmittedStep({ stepOrder = [] }: { stepOrder?: readonly Verific
 					...(state.mediaIds.proofOfAddress
 						? { proofOfAddressType: state.poaDocumentType ?? 'other' }
 						: {}),
-					// Smart-address submission (Address Intelligence) — the pin, the
-					// directions and, when attestPresence took one, the device fix.
-					...(state.address
-						? {
-								address: {
-									lat: state.address.lat,
-									lng: state.address.lng,
-									// The line the applicant CONFIRMED (search pick /
-									// reverse geocode): the server prefers it for the
-									// composed address over its own weaker derivation.
-									...(state.address.label?.trim() ? { label: state.address.label.trim() } : {}),
-									...(state.address.accuracy != null ? { accuracy: state.address.accuracy } : {}),
-									...(state.address.directions.trim()
-										? { directions: state.address.directions.trim() }
-										: {}),
-									...(state.address.propertyName.trim()
-										? { propertyName: state.address.propertyName.trim() }
-										: {}),
-									...(state.address.propertyNumber.trim()
-										? { propertyNumber: state.address.propertyNumber.trim() }
-										: {}),
-									...(state.address.street?.trim()
-										? { street: state.address.street.trim() }
-										: {}),
-									// The rest of the edit-details form — claims,
-									// sent only when actually typed.
-									...(state.address.unit?.trim() ? { unit: state.address.unit.trim() } : {}),
-									...(state.address.neighbourhood?.trim()
-										? { neighbourhood: state.address.neighbourhood.trim() }
-										: {}),
-									...(state.address.city?.trim() ? { city: state.address.city.trim() } : {}),
-									...(state.address.state?.trim() ? { state: state.address.state.trim() } : {}),
-									...(state.address.postcode?.trim()
-										? { postcode: state.address.postcode.trim() }
-										: {}),
-									// Workflow-REQUIRED fields the applicant left untouched
-										// ride their displayed map prefill: they saw it filled and
-										// confirmed by continuing, and the server 422s a required
-										// field that never arrives. Typed values are absent from
-										// this helper, so nothing above is overridden.
-										...requiredPrefillSubmission(config.addressCollection, state.address),
-										...(state.address.streetView ? { streetView: state.address.streetView } : {}),
-									...(state.address.deviceLat != null && state.address.deviceLng != null
-										? {
-												deviceLat: state.address.deviceLat,
-												deviceLng: state.address.deviceLng,
-												...(state.address.deviceAccuracy != null
-													? { deviceAccuracy: state.address.deviceAccuracy }
-													: {}),
-												...(state.address.capturedAt ? { capturedAt: state.address.capturedAt } : {}),
-											}
-										: {}),
-								},
-							}
-						: {}),
+					// Smart-address submission (Address Intelligence): the pin, the
+					// details and, when attestPresence took one, the device fix.
+					...addressSubmission(config.addressCollection, state.address, {
+						reuse: state.addressBookReuse,
+						hasPhoto: Boolean(state.mediaIds.addressPhoto),
+					}),
 					// Supporting documents — artefacts held on file. Validated against
 					// the resolved workflow's request list; anything it did not ask
 					// for is dropped server-side rather than refused.
@@ -336,7 +288,8 @@ export function SubmittedStep({ stepOrder = [] }: { stepOrder?: readonly Verific
 						selfie: state.mediaIds.selfie,
 						// Run-level like the selfie: one PoA document / door photo per run.
 						proofOfAddress: state.mediaIds.proofOfAddress,
-						addressPhoto: state.mediaIds.addressPhoto,
+						// A picked saved address carries no photo: the book keeps its own.
+						addressPhoto: state.addressBookReuse ? undefined : state.mediaIds.addressPhoto,
 						...videoIds,
 						...silent.mediaIds,
 					},
@@ -397,6 +350,14 @@ export function SubmittedStep({ stepOrder = [] }: { stepOrder?: readonly Verific
 			// straight back here once re-verified (see contact-recovery.ts).
 			// Everything else: retries (if any) are exhausted — surface a typed
 			// error.
+			// The saved address could not be used (grant spent or expired): the
+			// offer comes back over the address step rather than an error.
+			const reuseCode = serverRefusalOf(err)?.code;
+			if (reuseCode === "address_book_reuse_invalid" || reuseCode === "address_book_reuse_stale") {
+				dispatch({ type: "CLEAR_ERROR" });
+				dispatch({ type: "ADDRESS_BOOK_REUSE_REFUSED" });
+				return;
+			}
 			const expired = expiredContactChannels(err);
 			if (expired.length > 0) {
 				dispatch({ type: "CLEAR_CONTACT_PROOFS", payload: { channels: expired } });
@@ -478,7 +439,7 @@ export function SubmittedStep({ stepOrder = [] }: { stepOrder?: readonly Verific
 	return (
 		<SubmitSuccessScreen
 			title={successTitle(config.success, tokens, t)}
-			description={successDescription(config.success, tokens, isBusinessFlow(config), configScope(config), t)}
+			description={successDescription(config.success, tokens, isBusinessFlow(config) || isScopedBusiness(config), configScope(config), t)}
 			extra={
 				<>
 					{showsPresencePromise(config) && state.address && (
@@ -505,6 +466,9 @@ export function SubmittedStep({ stepOrder = [] }: { stepOrder?: readonly Verific
 						? <KeyPeoplePending />
 						: undefined
 					}
+					{/* Shareholders a slow register sends late join the list above,
+					    with their links, when they arrive. */}
+					{settled && ownershipPending && <KeyPeopleOwnershipNote where="submitted" />}
 				</>
 			}
 			action={terminalAction}

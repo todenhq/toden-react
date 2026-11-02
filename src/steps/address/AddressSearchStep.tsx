@@ -16,7 +16,7 @@ export function AddressSearchStep() {
   const { state, dispatch } = useVerificationContext();
   const t = useText();
   const flow = useAddressFlow();
-  const gate = useAddressIntroGate('address-search', flow.steps[0]!);
+  const gate = useAddressIntroGate('address-search', flow.firstCaptureStep);
 
   // Warm the GPS + reverse geocode from the moment the flow is reached —
   // UNDER the welcome screen too (user decision 2026-08-29): by the time
@@ -34,7 +34,7 @@ export function AddressSearchStep() {
   return (
     <div className="space-y-5 animate-slide-up">
       <StepHeader
-        title={t('address.search.title')}
+        title={t(flow.isBusiness ? 'address.search.title.business' : 'address.search.title')}
         description={t('address.search.description')}
         onBack={() => flow.goBack('address-search')}
       />

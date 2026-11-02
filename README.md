@@ -1,4 +1,4 @@
-# @myazahq/kyc-sdk-react
+# @toden/react
 
 React component library for Toden — drop-in identity verification (ID capture, document scan, and active liveness) that talks to the Toden API.
 
@@ -7,15 +7,15 @@ React component library for Toden — drop-in identity verification (ID capture,
 ## Installation
 
 ```bash
-pnpm add @myazahq/kyc-sdk-react
+pnpm add @toden/react
 ```
 
 ```bash
-yarn add @myazahq/kyc-sdk-react
+yarn add @toden/react
 ```
 
 ```bash
-npm install @myazahq/kyc-sdk-react
+npm install @toden/react
 ```
 
 ## Usage
@@ -29,8 +29,8 @@ Build the flow once in the Toden dashboard as a **workflow**, then mount it by i
 ```tsx
 "use client";
 
-import { Verification } from "@myazahq/kyc-sdk-react";
-import "@myazahq/kyc-sdk-react/styles.css";
+import { Verification } from "@toden/react";
+import "@toden/react/styles.css";
 
 export default function VerifyButton() {
 	return (
@@ -58,8 +58,8 @@ Skip the workflow and pass the flow's shape as props. Useful for a quick start o
 ```tsx
 "use client";
 
-import { Verification } from "@myazahq/kyc-sdk-react";
-import "@myazahq/kyc-sdk-react/styles.css";
+import { Verification } from "@toden/react";
+import "@toden/react/styles.css";
 
 export default function VerifyButton() {
 	return (
@@ -283,8 +283,8 @@ There is no separate component. Build a workflow whose **scope** is
 `<Verification />` with its `workflowId`:
 
 ```tsx
-import { Verification } from "@myazahq/kyc-sdk-react";
-import "@myazahq/kyc-sdk-react/styles.css";
+import { Verification } from "@toden/react";
+import "@toden/react/styles.css";
 
 <Verification
   apiKey="pk_live_xxx"
@@ -415,7 +415,7 @@ handlers still work) that also carries a typed `code` and optional `details`.
 The codes are **identical to the Flutter SDK**:
 
 ```ts
-import { Verification, VerificationError } from "@myazahq/kyc-sdk-react";
+import { Verification, VerificationError } from "@toden/react";
 
 <Verification
   {...config}
@@ -440,8 +440,9 @@ import { Verification, VerificationError } from "@myazahq/kyc-sdk-react";
 | `feature_disabled`         | Server returned `403` (ID type / feature not enabled for the org). |
 | `unknown`                  | Anything else.                                                      |
 
-> Voice guidance is TTS **output** — it never records audio, so there is **no
-> microphone permission** and no microphone error code.
+> Voice guidance is TTS **output**, so it needs **no microphone**. The only thing
+> that records sound is a workflow with `documentAudio` or `livenessAudio` on, and a refused
+> microphone never stops a verification, so there is no microphone error code.
 
 ### Network resilience
 

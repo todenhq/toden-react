@@ -32,6 +32,7 @@ export function KeyPeopleSection({
   onRemove,
   onQuickAdd,
   children,
+  notice,
 }: {
   section: KeyPeopleSection;
   title: string;
@@ -52,6 +53,8 @@ export function KeyPeopleSection({
   onQuickAdd: (index: number) => void;
   /** Extra section furniture (the UBO exemption checkbox). */
   children?: React.ReactNode;
+  /** A note shown under the definition (shareholders still on their way). */
+  notice?: React.ReactNode;
 }) {
   const t = useText();
   return (
@@ -60,6 +63,8 @@ export function KeyPeopleSection({
         <h3 className="text-lg font-semibold">{title}</h3>
         <p className="mt-0.5 text-sm text-muted-foreground">{description}</p>
       </div>
+
+      {notice}
 
       {members.length > 0 && (
         <div className="space-y-2">

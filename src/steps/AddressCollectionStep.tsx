@@ -38,7 +38,7 @@ export function AddressCollectionStep() {
   // conditional return renders "more hooks than during the previous render"
   // the moment the gate dismisses (shipped in 2.14.0, fixed in 2.14.1).
   const [missingNudge, setMissingNudge] = useState(false);
-  const gate = useAddressIntroGate('address-collection', flow.steps[0]!);
+  const gate = useAddressIntroGate('address-collection', flow.firstCaptureStep);
 
   // Trigger Use-my-location AUTOMATICALLY the first time the pin step opens
   // with no pin (user decision 2026-08-29): most people are verifying from
@@ -82,7 +82,6 @@ export function AddressCollectionStep() {
     state.address?.state,
     state.address?.postcode,
   ].filter((v) => v?.trim()).length;
-  const lastInFlow = flow.isBusiness;
 
   // Workflow-required details hold Continue until they are filled — and open
   // the sheet on the missing fields rather than pointing at a closed drawer.
@@ -94,8 +93,8 @@ export function AddressCollectionStep() {
       setSheetOpen(true);
       return;
     }
-    if (lastInFlow) void flow.confirm();
-    else flow.goNext('address-collection');
+    // The review step closes the flow, for a person and a business alike.
+    flow.goNext('address-collection');
   };
 
   return (

@@ -97,32 +97,42 @@ export function HintPill({
 }
 
 /**
- * The shutter. Manual capture always works — auto-capture is an assist, so a
- * user whose document will not lock on is never stranded.
+ * The shutter. It takes a photo only once all four corners of the document are
+ * in view with room past them (lib/document-corners.ts); until then it is
+ * disabled and `blockedReason` says why, to screen readers as well. When the
+ * detector cannot run on the device there is no reason, and it always works.
  */
 export function Shutter({
   onCapture,
   busy,
   primaryColor,
   size = 72,
+  blockedReason = null,
 }: {
   onCapture: () => void;
   busy: boolean;
   primaryColor: string;
   size?: number;
+  blockedReason?: string | null;
 }) {
   const icon = size >= 64 ? 'h-7 w-7' : 'h-6 w-6';
+  const blocked = !!blockedReason;
   return (
     <button
       type="button"
-      onClick={onCapture}
+      // aria-disabled rather than disabled while blocked: the button stays
+      // focusable, so a screen reader can still reach it and hear the reason.
+      onClick={blocked ? undefined : onCapture}
       disabled={busy}
-      aria-label="Capture document"
+      aria-disabled={blocked || undefined}
+      aria-label={blocked ? `Capture document. ${blockedReason}` : 'Capture document'}
+      title={blockedReason ?? undefined}
       className={cn(
         'pointer-events-auto flex items-center justify-center rounded-full',
-        'ring-4 ring-white transition-transform active:scale-95',
+        'ring-4 ring-white transition-[transform,opacity] active:scale-95',
         'focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-white',
         busy && 'opacity-70',
+        blocked && 'cursor-not-allowed opacity-50 active:scale-100',
       )}
       style={{ backgroundColor: primaryColor, width: size, height: size }}
     >

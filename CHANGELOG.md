@@ -1,5 +1,68 @@
 # Changelog
 
+## 4.0.0
+
+The first release as `@toden/react`. The version moves to 4.0.0 because everyone upgrading changes their install and imports, and because two capture defaults change.
+
+**Deploy note for Toden:** ship the matching server release first. Business documents sent one per group, address book reuse and `sessionId` on `/contact/send` need it.
+
+### Upgrading from `@myazahq/kyc-sdk-react`
+
+- Remove `@myazahq/kyc-sdk-react` and install `@toden/react`, then change your imports (`@toden/react` and `@toden/react/styles.css`). The API is unchanged, and the deprecated aliases from 3.8.0 still work. `@myazahq/kyc-sdk-react` receives no further releases.
+- The document review screen is now off unless a workflow (or the `documentReview` prop) turns it on. Uploaded photos are still always reviewed.
+- A document is captured only once all four of its corners are in view. The photo that used to be taken after 6 seconds anyway is gone.
+
+### OTP settings from the session
+
+- The contact step sends `sessionId` on `/contact/send`, so the server reads the code length and attempts from the workflow the attempt is pinned to, and sizes the code field from the `codeLength` it returns.
+
+### Document review and audio
+
+- `documentReview` (default off): `true` shows the review screen after a document scan. Uploaded photos always get the review, and so does a scan that failed to upload or that the capture check could not read.
+- `livenessAudio` (default off): records sound on the liveness recording. The consent screen does not mention it. The browser asks for the microphone before the camera opens. A refusal gives a video without sound.
+- `documentAudio` (default off): records sound on the document capture video. The consent screen does not mention it. The browser asks for the microphone before the camera opens. A refusal gives a video without sound. In an iframe, allow it with `allow="camera; microphone"`.
+
+### Liveness lighting judged on the face
+
+- The liveness step no longer tells a well-lit person to move to a brighter area because the room behind them is dark. The light check now measures the skin in the middle of the face (forehead to upper lip, inside the cheeks), so a dark wall, a dark room, hair or a beard no longer count against it. With no face in view it still judges the whole frame, so a room too dark to find a face in still gets the warning.
+
+### Business documents, one group at a time
+
+- The business documents step groups what the organisation asks for (legal presence, company details, ownership structure, authority to represent the business, address, financial, tax, licences and permits). The applicant uploads one document per group, one group at a time, instead of facing a slot for every document.
+- The applicant never says which document they uploaded: the group lists the documents it accepts, and the server recognises which one it is from its text. Uploads are sent as `{ group, mediaId }`.
+- Each accepted document shows how recent it must be ("From the last 3 months") when the workflow sets a validity window. The date is checked after submission.
+- A new screen: the groups are a vertical carousel. The open group's card is in front, the next group's card is tucked behind it at the top (showing its title and what it will ask for) and the previous group's card behind it at the bottom (its file, or Skipped, with Change to reopen it); a thin edge beyond each shows there are more groups that way. Continue brings the next card down into the middle; Back brings the previous one up. The open card shows its position ("2 of 5"), the documents the group accepts with how recent each must be on its own line, and a tall upload area that is itself the control: press it to choose a file or drop one on it (there is no separate Choose or Take a photo button, so Continue is the only primary button). Once uploaded, a card shows the file with Replace and Remove. A new upload replaces the group's earlier one.
+- The button reads Next on every group but the last and Continue on the last; an optional group with nothing uploaded reads Skip.
+- A finished group keeps its number, with a small tick on it, so the count stays visible. A file name that is a random id (as phone cameras often give) shows as Uploaded instead.
+- An optional group can be skipped. Back steps through the groups before leaving the step.
+- A refused submission (`missing_documents`) names the missing groups when the server sends `missingGroups`.
+- Needs the matching server release, which accepts one document per group.
+
+### The Toden address book
+
+- When the organisation has it on, the address flow opens with a choice: use an address the person saved with Toden (an email, a six-digit code, then a pick) or enter one. A picked address skips the map, the entrance photo and the review, and is sent as `addressBookReuse` instead of a pin.
+- A flow with a presence check lists only saved addresses whose presence was confirmed in the last six months, and says why others are missing.
+- If the server refuses the picked address (the code expired or the address can no longer be used), the flow returns to the address book step instead of ending on an error.
+- The review step offers an unticked box to save the confirmed address to the person's own Toden address book, with the directions and the entrance photo each included only if they choose.
+- Never offered on business verifications.
+
+### Scoped business workflows
+
+- A business workflow with the address, questionnaire or contact scope now runs that scope's own steps. It never opens the business application (company search, registry lookup, key people, documents or the applicant's own check).
+- Those screens name the business: the welcome screen, its list of steps, the email and phone code steps, proof of address, the address search, pin and review, the questionnaire and the success screen. A workflow's own wording for the person's version of a text still applies to the business version.
+- A business workflow with a face check scope is refused with a clear error and never opens the camera. `onError` receives `invalid_workflow`.
+- A submission the server refuses with `entity_type_mismatch` (the reference names a person on a business workflow, or the reverse) is reported as `invalid_workflow` with a clear message, not as something to retry.
+- Fixed: Back on a questionnaire-only workflow went to the selfie step; it now goes to the contact codes, or the welcome screen.
+- The text editor list shows the business application's texts on unscoped business workflows only, and the proof of address texts on business address checks too.
+
+### Document capture
+
+- A document is photographed only when all four of its corners are inside the visible frame, with a little room past each one. People were lining passports up against the bottom of the screen and cutting the machine-readable zone in half, which made it harder to read.
+- The saved photo keeps that room: it is cropped to the corners plus 4% of the frame on every side.
+- The capture button stays disabled until the corners are in view, and the hint says what to do: place the ID inside the frame, fit all four corners inside it, or move back a little. If the device cannot run the corner detector, the button works as before.
+- The timed fallback that took a photo after 6 seconds without the corners is gone.
+- Fixed: the framing hint said "Move back" whenever a card was found.
+
 ## 3.8.0
 
 The entry point is now `Verification`, and the flow carries the Toden brand. The package name is unchanged.

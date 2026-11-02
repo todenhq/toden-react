@@ -15,6 +15,12 @@ export const GENERAL_ERROR_TEXTS: TextEntry[] = [
     multiline: true,
   },
   {
+    key: 'general.error.entityTypeMismatch',
+    label: 'Error: reference belongs to another kind of record',
+    default: 'This verification is set up for a different kind of record. Contact the organisation that sent it.',
+    multiline: true,
+  },
+  {
     key: 'general.error.businessVerificationsDisabled',
     label: 'Error: business verification not enabled',
     default: 'Business verification is not enabled for this organization. Contact your administrator to request access.',

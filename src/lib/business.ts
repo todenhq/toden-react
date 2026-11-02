@@ -8,8 +8,10 @@
 // ---------------------------------------------------------------------------
 
 import type { KeyPersonRole, SubjectType, WorkflowBusinessConfig } from '../types/business';
+import { regionOf } from './regions';
 import { defaultText } from '../i18n/translate';
 import type { TextFn } from '../i18n/types';
+import { configScope, type WorkflowScope } from './scope';
 
 export interface BusinessProductDef {
   key: string;
@@ -126,17 +128,47 @@ export function businessCountryName(code: string): string {
   }
 }
 
-// Continent per supported registry country — display grouping only (the server
-// owns the real catalogue; unknown codes land in "Other"). Africa first.
-// `textKey` is the text key of the continent's heading.
-const REGIONS: Array<{ textKey: string; codes: string[] }> = [
-  { textKey: 'business.country.region.africa', codes: ['CI', 'KE', 'MA', 'NG', 'TN', 'TZ', 'YT', 'ZA'] },
-  { textKey: 'business.country.region.europe', codes: ['BE', 'BG', 'BY', 'CH', 'CY', 'CZ', 'DE', 'DK', 'EE', 'FI', 'FR', 'GB', 'GG', 'GR', 'IE', 'LV', 'MD', 'MT', 'NL', 'NO', 'PL', 'RO', 'SI', 'SK', 'UA'] },
-  { textKey: 'business.country.region.asia', codes: ['AE', 'IL', 'IN', 'JP', 'KZ', 'NP', 'SA', 'TR', 'UZ'] },
-  { textKey: 'business.country.region.northAmerica', codes: ['CA', 'PR', 'US'] },
-  { textKey: 'business.country.region.southAmerica', codes: ['AR'] },
-  { textKey: 'business.country.region.oceania', codes: ['AU', 'NZ'] },
+// Continent headings for the registry picker, Africa first. Read off the full
+// ISO map in lib/regions.ts, so every register (YouVerify's and the ~190 read
+// through Didit) lands on its continent; a hand-typed list here left every
+// country added later under "Other". The Middle East counts as Asia, the
+// Americas split at South America, and Asia & Pacific at Oceania, the way the
+// server files them (kyc-core business-countries/didit.ts).
+const REGIONS: Array<{ textKey: string; key: BusinessContinent }> = [
+  { textKey: 'business.country.region.africa', key: 'africa' },
+  { textKey: 'business.country.region.europe', key: 'europe' },
+  { textKey: 'business.country.region.asia', key: 'asia' },
+  { textKey: 'business.country.region.northAmerica', key: 'northAmerica' },
+  { textKey: 'business.country.region.southAmerica', key: 'southAmerica' },
+  { textKey: 'business.country.region.oceania', key: 'oceania' },
 ];
+
+type BusinessContinent = 'africa' | 'europe' | 'asia' | 'northAmerica' | 'southAmerica' | 'oceania';
+
+const SOUTH_AMERICA = new Set(['AR', 'BO', 'BR', 'CL', 'CO', 'EC', 'FK', 'GF', 'GY', 'PE', 'PY', 'SR', 'UY', 'VE']);
+const OCEANIA = new Set([
+  'AS', 'AU', 'CK', 'FJ', 'FM', 'GU', 'KI', 'MH', 'MP', 'NC', 'NF', 'NR', 'NU', 'NZ', 'PF', 'PG', 'PN', 'PW',
+  'SB', 'TK', 'TO', 'TV', 'VU', 'WF', 'WS',
+]);
+
+/** The continent a registry country is shown under, or null for "Other". */
+export function businessContinentOf(code: string): BusinessContinent | null {
+  const up = code.toUpperCase();
+  switch (regionOf(up)) {
+    case 'Africa':
+      return 'africa';
+    case 'Europe':
+      return 'europe';
+    case 'Middle East':
+      return 'asia';
+    case 'Americas':
+      return SOUTH_AMERICA.has(up) ? 'southAmerica' : 'northAmerica';
+    case 'Asia & Pacific':
+      return OCEANIA.has(up) ? 'oceania' : 'asia';
+    default:
+      return null;
+  }
+}
 
 export interface BusinessCountryGroup {
   label: string;
@@ -153,7 +185,7 @@ export function groupBusinessCountries(
   const placed = new Set<string>();
   for (const region of REGIONS) {
     const countries = entries
-      .filter((e) => region.codes.includes(e.code))
+      .filter((e) => businessContinentOf(e.code) === region.key)
       .sort((a, b) => a.name.localeCompare(b.name));
     countries.forEach((c) => placed.add(c.code));
     if (countries.length > 0) groups.push({ label: t(region.textKey), countries });
@@ -171,7 +203,12 @@ export function groupBusinessCountries(
 export function isBusinessFlow(config: {
   subjectType?: SubjectType;
   business?: WorkflowBusinessConfig;
+  scope?: WorkflowScope | string;
 }): boolean {
+  // A scoped workflow runs its scope's own steps whoever it is about: a
+  // business address, questionnaire or contact check never enters the KYB
+  // application (company search, registry lookup, key people, documents).
+  if (configScope(config) !== null) return false;
   return config.subjectType === 'business' && !!config.business;
 }
 

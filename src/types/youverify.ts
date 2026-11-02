@@ -172,6 +172,7 @@ export type YouVerifyNigeriaIdEndpoint =
   | 'nin'
   | 'vnin'
   | 'tax-id'
+  | 'phone'
   | 'drivers-license'
   | 'passport'
   | 'pvc';

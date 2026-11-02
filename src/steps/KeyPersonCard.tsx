@@ -1,7 +1,9 @@
 'use client';
 
+import { useVerificationConfig } from '../context/VerificationConfigContext';
+import { keyPeopleRequireOwnership, rowMissingStake } from '../lib/key-person-stake';
 import React from 'react';
-import { Building2, Pencil, X } from '../components/icons';
+import { Building2, FileText, Pencil, X } from '../components/icons';
 import { CountryFlag } from '../components/CountryFlag';
 import {
   initialsOf,
@@ -52,14 +54,18 @@ export function KeyPersonCard({
   const pct = entry.ownershipPct.trim();
   // A row persisted by the old inline UI (or interrupted mid-edit) may be
   // incomplete — the card says so instead of silently blocking Continue.
-  const incomplete = !isKeyPersonRowValid(entry, emailRequiredFor);
+  const stakeRequired = keyPeopleRequireOwnership(useVerificationConfig().business);
+  const incomplete = !isKeyPersonRowValid(entry, emailRequiredFor, stakeRequired);
   // Say WHICH thing is missing, on the row it is missing from. A person who
   // needs an email is a different fix from a half-typed row, and "incomplete"
   // sends them into the form to work out which.
+  const named = entry.name.trim().length >= 2;
   const problem =
-    rowNeedsEmail(entry, emailRequiredFor) && entry.email.trim() === '' && entry.name.trim().length >= 2
-      ? t('keyPeople.card.emailRequired')
-      : t('keyPeople.card.incomplete');
+    named && rowMissingStake(entry, stakeRequired)
+      ? t('keyPeople.card.ownershipRequired')
+      : rowNeedsEmail(entry, emailRequiredFor) && entry.email.trim() === '' && named
+        ? t('keyPeople.card.emailRequired')
+        : t('keyPeople.card.incomplete');
 
   const meta = [
     // Says why this row has no verification link beside it, on the row itself.
@@ -108,6 +114,12 @@ export function KeyPersonCard({
         ) : detail !== '' ? (
           <span className="mt-0.5 block truncate text-xs text-muted-foreground">{detail}</span>
         ) : null}
+        {entry.documentRemoved && (
+          <span className="mt-1 flex items-center gap-1 text-xs font-medium text-amber-700 dark:text-amber-400">
+            <FileText className="h-3.5 w-3.5 shrink-0" aria-hidden />
+            <span className="truncate">{t('keyPeople.card.documentRemoved')}</span>
+          </span>
+        )}
       </span>
 
       <Pencil className="h-4 w-4 shrink-0 text-muted-foreground" />

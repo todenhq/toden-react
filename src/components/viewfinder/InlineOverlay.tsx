@@ -1,7 +1,7 @@
 'use client';
 
 import { DocumentScanOverlay } from './DocumentScanOverlay';
-import { DocumentGhost } from './DocumentGhost';
+import { DocumentGhost, type DocumentSpecimenSubject } from './DocumentGhost';
 import { DocumentPill, HintPill, SideBadge, Shutter } from './parts';
 import type { DocumentFraming } from '../../lib/document-framing-gate';
 
@@ -21,39 +21,46 @@ import type { DocumentFraming } from '../../lib/document-framing-gate';
 export function InlineOverlay({
   side,
   documentLabel,
-  showMrzBand,
+  specimen,
+  showSpecimen,
   country,
   guideAspect,
   framing,
   progress,
   hint,
   busy,
-  mirrored,
   onCapture,
+  shutterBlockedReason = null,
   primaryColor,
 }: {
   side: 'front' | 'back';
   documentLabel: string;
-  showMrzBand: boolean;
+  /** The ID being captured, for the sample document. */
+  specimen: DocumentSpecimenSubject;
+  /** Off once the turn-over prompt has already shown this side. */
+  showSpecimen: boolean;
   country?: string | null;
   guideAspect: number;
   framing: DocumentFraming;
   progress: number;
   hint: string;
   busy: boolean;
-  /** The preview is mirrored (front-facing camera). */
-  mirrored: boolean;
   onCapture: () => void;
+  /** Why the shutter cannot take a photo yet; null when it can. */
+  shutterBlockedReason?: string | null;
   primaryColor: string;
 }) {
   return (
     <>
-      <DocumentGhost
-        aspect={guideAspect}
-        showMrzBand={showMrzBand}
-        documentFound={framing !== 'none' && framing !== 'wrongShape'}
-        mirrored={mirrored}
-      />
+      {showSpecimen && (
+        <DocumentGhost
+          key={side}
+          aspect={guideAspect}
+          accent={primaryColor}
+          subject={specimen}
+          documentFound={framing !== 'none' && framing !== 'wrongShape'}
+        />
+      )}
 
       <DocumentScanOverlay
         framing={framing}
@@ -77,6 +84,7 @@ export function InlineOverlay({
         <Shutter
           onCapture={onCapture}
           busy={busy}
+          blockedReason={shutterBlockedReason}
           primaryColor={primaryColor}
           size={56}
         />

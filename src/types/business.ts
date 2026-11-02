@@ -38,7 +38,18 @@ export type BusinessDocumentKey =
   | 'tax_document'
   | 'regulatory_license'
   | 'board_resolution'
-  | 'other';
+  | 'other'
+  | 'business_registration'
+  | 'good_standing_certificate'
+  | 'registry_extract'
+  | 'annual_return'
+  | 'register_of_directors'
+  | 'shareholder_register'
+  | 'share_certificate'
+  | 'ubo_declaration'
+  | 'power_of_attorney'
+  | 'authorization_letter'
+  | 'financial_statements';
 
 /** Verification depth for discovered key people. */
 export type KeyPeopleLevel = 'screening_only' | 'data' | 'full_kyc';
@@ -67,6 +78,8 @@ export interface WorkflowKeyPeopleConfig {
   roles?: KeyPersonRole[];
   /** Shareholders at/above this % escalate to beneficial owner (default 25). */
   ownershipThreshold?: number;
+  /** Shareholders and beneficial owners must give a percentage (absent = yes). */
+  requireOwnership?: boolean;
   /** Default verification depth when a role has no `perRole` override. */
   level?: KeyPeopleLevel;
   requirement?: 'all_in_scope' | 'ubos_only' | 'advisory';
@@ -116,6 +129,11 @@ export interface WorkflowBusinessConfig {
    * changed company whatever the form allowed.
    */
   lockCountryAfterCheck?: boolean;
+  /**
+   * Offer search by company name on the details step. Absent = on; false opens
+   * the step on registration-number entry and never searches.
+   */
+  nameSearch?: boolean;
   /** The company the ORG asserted at session creation, skipping the search. */
   assertedCompany?: {
     country: string;
@@ -145,6 +163,8 @@ export interface WorkflowBusinessDocumentTypeConfig {
   label?: string;
   /** Submission is blocked (422 missing_documents) until this slot is uploaded. */
   required?: boolean;
+  /** How recent it must be, in months. Absent = any date. Checked after submission. */
+  maxAgeMonths?: number;
 }
 
 /**

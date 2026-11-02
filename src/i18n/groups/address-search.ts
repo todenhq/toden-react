@@ -3,6 +3,7 @@ import type { TextEntry } from '../types';
 /** Finding the address: search, current location and the errors a fix can end in. */
 export const ADDRESS_SEARCH_ENTRIES: TextEntry[] = [
   { key: 'address.search.title', label: 'Search: title', default: 'Find your address' },
+  { key: 'address.search.title.business', label: 'Search: title (business)', default: 'Find the business premises' },
   {
     key: 'address.search.description',
     label: 'Search: description',

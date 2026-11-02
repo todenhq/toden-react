@@ -90,6 +90,7 @@ export function HostedFlow({
     googleMapsBrowserKey: bootstrap.googleMapsBrowserKey,
     addressSearch: bootstrap.addressSearch,
     addressSearchMode: bootstrap.addressSearchMode,
+    addressBook: bootstrap.addressBook,
   };
 
   return (
@@ -131,6 +132,9 @@ export function HostedFlow({
         enableDocumentCapture={leg.enableDocumentCapture}
         allowDocumentUpload={leg.allowDocumentUpload}
         allowDocumentScan={leg.allowDocumentScan}
+        documentReview={leg.documentReview as boolean | undefined}
+        documentAudio={leg.documentAudio as boolean | undefined}
+        livenessAudio={leg.livenessAudio as boolean | undefined}
         enableLiveness={leg.enableLiveness}
         livenessMode={leg.livenessMode as 'gestures' | 'flash' | 'both' | 'passive' | undefined}
         flashSequenceLength={leg.flashSequenceLength as number | undefined}

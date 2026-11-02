@@ -43,6 +43,8 @@ export const CAPTURE_FRAMERATE_MAX = 20;
 // --- Video bitrate cap (the main lever for video file size) ----------------
 export const LIVENESS_VIDEO_BITRATE = 500_000; // 500 kbps
 export const DOCUMENT_VIDEO_BITRATE = 500_000; // 500 kbps
+/** Speech on a short evidence clip: enough to hear it, not a recording studio. */
+export const DOCUMENT_AUDIO_BITRATE = 32_000; // 32 kbps
 
 // --- Still-image JPEG quality ----------------------------------------------
 export const SELFIE_IMAGE_QUALITY = 0.8; // moderate
@@ -116,16 +118,17 @@ export function isFrontFacingStream(stream: MediaStream | null): boolean {
  * WebM. Returns `null` when the browser supports no usable container, so callers
  * can skip recording rather than throw.
  */
-export function pickVideoMimeType(): string | null {
+export function pickVideoMimeType(withAudio = false): string | null {
   if (typeof MediaRecorder === 'undefined') return null;
   // WebM first (smaller, and what most browsers record); MP4 for Safari, which
   // records only MP4 before 18.4 — without it no liveness recording was made on
   // those iPhones at all. The server accepts both.
   const candidates = [
-    'video/webm;codecs=vp9',
-    'video/webm;codecs=vp8',
+    ...(withAudio
+      ? ['video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus', 'video/mp4;codecs=avc1,mp4a.40.2']
+      : ['video/webm;codecs=vp9', 'video/webm;codecs=vp8']),
     'video/webm',
-    'video/mp4;codecs=avc1',
+    ...(withAudio ? [] : ['video/mp4;codecs=avc1']),
     'video/mp4',
   ];
   for (const type of candidates) {
@@ -142,11 +145,29 @@ export function pickVideoMimeType(): string | null {
 export function createVideoRecorder(
   stream: MediaStream,
   bitrate: number,
+  audio?: MediaStream | null,
 ): { recorder: MediaRecorder; mimeType: string } | null {
-  const mimeType = pickVideoMimeType();
+  // Sound is a bonus on this clip: if a recorder cannot take it, record without.
+  const audioTracks = audio?.getAudioTracks() ?? [];
+  if (audioTracks.length > 0) {
+    const mixed = new MediaStream([...stream.getVideoTracks(), ...audioTracks]);
+    const withAudio = openRecorder(mixed, pickVideoMimeType(true), {
+      videoBitsPerSecond: bitrate,
+      audioBitsPerSecond: DOCUMENT_AUDIO_BITRATE,
+    });
+    if (withAudio) return withAudio;
+  }
+  return openRecorder(stream, pickVideoMimeType(), { videoBitsPerSecond: bitrate });
+}
+
+function openRecorder(
+  stream: MediaStream,
+  mimeType: string | null,
+  bitrates: MediaRecorderOptions,
+): { recorder: MediaRecorder; mimeType: string } | null {
   if (!mimeType) return null;
   try {
-    const recorder = new MediaRecorder(stream, { mimeType, videoBitsPerSecond: bitrate });
+    const recorder = new MediaRecorder(stream, { mimeType, ...bitrates });
     // Strip codec params (e.g. ";codecs=vp9") — the upload endpoint rejects them.
     return { recorder, mimeType: mimeType.split(';')[0] };
   } catch {

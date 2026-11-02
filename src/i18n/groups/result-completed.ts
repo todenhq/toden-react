@@ -44,6 +44,26 @@ export const RESULT_COMPLETED_TEXTS: TextEntry[] = [
     default: 'Your contact details have been verified. There is nothing left to do here.',
     multiline: true,
   },
+  // A scoped business workflow, worded for the company. An org's own words
+  // for the base text still apply (i18n/business-variants.ts).
+  {
+    key: 'result.completed.approved.description.address.business',
+    label: 'Returning, verified: description (business address check)',
+    default: "Your business's address has been verified. There is nothing left to do here.",
+    multiline: true,
+  },
+  {
+    key: 'result.completed.approved.description.questionnaire.business',
+    label: 'Returning, verified: description (business questionnaire)',
+    default: 'Your answers about your business have been received. There is nothing left to do here.',
+    multiline: true,
+  },
+  {
+    key: 'result.completed.approved.description.contact.business',
+    label: 'Returning, verified: description (business contact check)',
+    default: "Your business's contact details have been verified. There is nothing left to do here.",
+    multiline: true,
+  },
   { key: 'result.completed.declined.title', label: 'Returning, not verified: title', default: 'Verification unsuccessful' },
   {
     key: 'result.completed.declined.description.individual',
@@ -85,6 +105,27 @@ export const RESULT_COMPLETED_TEXTS: TextEntry[] = [
     label: 'Returning, not verified: description (contact check)',
     default:
       'Your contact details could not be verified. Contact the organisation that sent you this link to find out what happens next.',
+    multiline: true,
+  },
+  {
+    key: 'result.completed.declined.description.address.business',
+    label: 'Returning, not verified: description (business address check)',
+    default:
+      "Your business's address could not be verified. Contact the organisation that sent you this link to find out what happens next.",
+    multiline: true,
+  },
+  {
+    key: 'result.completed.declined.description.questionnaire.business',
+    label: 'Returning, not verified: description (business questionnaire)',
+    default:
+      'Your answers about your business could not be accepted. Contact the organisation that sent you this link to find out what happens next.',
+    multiline: true,
+  },
+  {
+    key: 'result.completed.declined.description.contact.business',
+    label: 'Returning, not verified: description (business contact check)',
+    default:
+      "Your business's contact details could not be verified. Contact the organisation that sent you this link to find out what happens next.",
     multiline: true,
   },
   { key: 'result.completed.actionNeeded.title', label: 'Returning, more needed: title', default: 'More information needed' },

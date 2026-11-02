@@ -25,6 +25,12 @@ export const GENERAL_TEXTS: TextGroup = {
       label: 'Unable to start: description',
       default: 'Unable to start verification. Please try again.',
     },
+    {
+      key: 'general.configError.unsupportedScope',
+      label: 'Unable to start: business face check',
+      default:
+        'This verification is set up as a face check for a business, which is not supported. Contact the organisation that sent it.',
+    },
     { key: 'general.sessionCancelled.title', label: 'Cancelled session: title', default: 'This verification was cancelled' },
     {
       key: 'general.sessionCancelled.description',

@@ -57,7 +57,11 @@ export function AddressEntranceStep() {
       <StepHeader
         title={t('address.entrance.title')}
         description={t(
-          mode === 'framing' ? 'address.entrance.description.framing' : 'address.entrance.description.photo',
+          mode === 'framing'
+            ? 'address.entrance.description.framing'
+            : flow.isBusiness
+              ? 'address.entrance.description.photo.business'
+              : 'address.entrance.description.photo',
         )}
         onBack={() => flow.goBack('address-entrance')}
       />

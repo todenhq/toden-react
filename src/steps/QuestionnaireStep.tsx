@@ -8,6 +8,9 @@ import { useVerificationConfig } from '../context/VerificationConfigContext';
 import { hasProofOfAddressStep, hasAddressCollectionStep, addressReturnStep } from '../lib/post-capture';
 import { hasSupportingDocumentsStep, verifiedIdsFromState } from '../lib/supporting-documents';
 import { isBusinessFlow } from '../lib/business';
+import { configScope, isScopedBusiness } from '../lib/scope';
+import { lastContactStep } from '../lib/contact-steps';
+import { businessKey } from '../i18n/business-variants';
 import { nextBusinessStep, prevBusinessStep } from '../lib/business-application';
 import { QuestionField } from './QuestionnaireFields';
 import type { QuestionnaireAnswerValue } from '../types/config';
@@ -25,6 +28,8 @@ export function QuestionnaireStep() {
   const config = useVerificationConfig();
   const t = useText();
   const [errors, setErrors] = useState<Record<string, string>>({});
+  // A scoped business workflow asks about the company.
+  const scopedBusiness = isScopedBusiness(config);
 
   const questionnaire = config.questionnaire;
   const fields = questionnaire?.fields ?? [];
@@ -41,6 +46,12 @@ export function QuestionnaireStep() {
     // walks that order.
     if (isBusinessFlow(config)) {
       dispatch({ type: 'SET_STEP', payload: prevBusinessStep('questionnaire', config) });
+      return;
+    }
+    // The questionnaire scope has nothing behind it but the contact codes (or
+    // consent), whoever it is about.
+    if (configScope(config) === 'questionnaire') {
+      dispatch({ type: 'SET_STEP', payload: lastContactStep(config) });
       return;
     }
     // Individual capture leg: the address step when it ran, else Proof of
@@ -125,8 +136,8 @@ export function QuestionnaireStep() {
   return (
     <div className="space-y-6 animate-slide-up">
       <StepHeader
-        title={t('questionnaire.title', undefined, questionnaire?.title)}
-        description={t('questionnaire.description', undefined, questionnaire?.description)}
+        title={t(businessKey('questionnaire.title', scopedBusiness), undefined, questionnaire?.title)}
+        description={t(businessKey('questionnaire.description', scopedBusiness), undefined, questionnaire?.description)}
         onBack={handleBack}
       />
 

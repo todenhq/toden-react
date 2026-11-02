@@ -19,7 +19,7 @@ export const KEY_PEOPLE_AWAIT_TEXTS: TextEntry[] = [
     key: 'keyPeople.await.intro',
     label: 'People still to verify',
     default:
-      'To complete the review, the people below must verify their identity with a KYC check. Anyone with an email on file has already been sent their link.',
+      'To complete the review, the people below must verify their identity with a KYC check. We will email each person their link if you gave their email address.',
     multiline: true,
   },
   { key: 'keyPeople.await.group.ubos', label: 'Group: beneficial owners', default: 'UBOs' },
@@ -30,6 +30,7 @@ export const KEY_PEOPLE_AWAIT_TEXTS: TextEntry[] = [
   { key: 'keyPeople.await.group.other', label: 'Group: other people', default: 'Other people' },
   { key: 'keyPeople.await.you', label: 'Marker: you', default: '(you)' },
   { key: 'keyPeople.await.company', label: 'Tag: company', default: 'Company' },
+  { key: 'keyPeople.await.foundInDocuments', label: 'Note: found in the documents', default: 'Found in your company documents' },
   { key: 'keyPeople.await.roleFallback', label: 'Role: unknown', default: 'Key person' },
   { key: 'keyPeople.await.status.verified', label: 'Status: verified', default: 'Verified' },
   { key: 'keyPeople.await.status.submitted', label: 'Status: submitted', default: 'Submitted' },
@@ -46,4 +47,11 @@ export const KEY_PEOPLE_AWAIT_TEXTS: TextEntry[] = [
     placeholders: ['name'],
   },
   { key: 'keyPeople.await.linkValidity', label: 'Link validity note', default: 'Links are valid for 14 days.' },
+  {
+    key: 'keyPeople.await.ownershipPending',
+    label: 'Shareholders still arriving from the register',
+    default:
+      'Shareholders from the register are still on their way. Their invite links will appear here when they arrive.',
+    multiline: true,
+  },
 ];

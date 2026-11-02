@@ -15,6 +15,17 @@ const BUSINESS_DOCUMENT_TEXT_KEYS: Record<BusinessDocumentKey, string> = {
   regulatory_license: 'business.documents.type.regulatoryLicense',
   board_resolution: 'business.documents.type.boardResolution',
   other: 'business.documents.type.other',
+  business_registration: 'business.documents.type.businessRegistration',
+  good_standing_certificate: 'business.documents.type.goodStandingCertificate',
+  registry_extract: 'business.documents.type.registryExtract',
+  annual_return: 'business.documents.type.annualReturn',
+  register_of_directors: 'business.documents.type.registerOfDirectors',
+  shareholder_register: 'business.documents.type.shareholderRegister',
+  share_certificate: 'business.documents.type.shareCertificate',
+  ubo_declaration: 'business.documents.type.uboDeclaration',
+  power_of_attorney: 'business.documents.type.powerOfAttorney',
+  authorization_letter: 'business.documents.type.authorizationLetter',
+  financial_statements: 'business.documents.type.financialStatements',
 };
 
 const KEY_PERSON_ROLE_TEXT_KEYS: Record<KeyPersonRole, string> = {

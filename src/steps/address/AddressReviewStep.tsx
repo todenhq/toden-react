@@ -11,6 +11,7 @@ import { cn } from '../../lib/utils';
 import { useVerificationContext } from '../../context/VerificationContext';
 import { useVerificationConfig } from '../../context/VerificationConfigContext';
 import { useAddressFlow } from './use-address-flow';
+import { SaveAddressSheet } from './SaveAddressSheet';
 import { ADDRESS_LINE_PENDING, displayAddressLine } from './flow-steps';
 import { missingAddressFieldsMessage, missingRequiredAddressFields } from './address-field-modes';
 import { useText } from '../../i18n';
@@ -134,6 +135,7 @@ export function AddressReviewStep() {
   // must be filled before the address can be confirmed (the pin step is the
   // primary gate).
   const missingRequired = missingRequiredAddressFields(flow.address, state.address ?? null);
+  const [askSave, setAskSave] = useState(false);
 
   return (
     <div className="space-y-4 animate-slide-up">
@@ -244,7 +246,11 @@ export function AddressReviewStep() {
       )}
 
       <Button
-        onClick={() => void flow.confirm()}
+        onClick={() => {
+          // Asked once: an answer already given is not asked for again.
+          if (flow.bookOffer.save && !state.address?.book) setAskSave(true);
+          else void flow.confirm();
+        }}
         disabled={!pin || flow.confirming || missingRequired.length > 0}
         className="h-12 w-full rounded-xl text-base font-medium"
       >
@@ -259,6 +265,13 @@ export function AddressReviewStep() {
         >
           {t('address.skip')}
         </button>
+      )}
+      {askSave && state.address && (
+        <SaveAddressSheet
+          line={displayAddressLine(state.address)}
+          onClose={() => setAskSave(false)}
+          onDecided={() => void flow.confirm()}
+        />
       )}
     </div>
   );

@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react';
 import type { DocumentFraming } from '../../lib/document-framing-gate';
+import type { GuideBand } from '../../lib/document-guide';
 import { paintScan } from './scan-painter';
 
 // ─── Document scan overlay ──────────────────────────────────────────────────
@@ -31,6 +32,7 @@ export function DocumentScanOverlay({
   framing,
   progress,
   aspect,
+  band = null,
   successColor = '#22c55e',
   warningColor = '#f59e0b',
   primaryColor,
@@ -40,6 +42,8 @@ export function DocumentScanOverlay({
   progress: number;
   /** Guide rect aspect (width / height) the document should fill. */
   aspect: number;
+  /** The free band an upright guide is fitted to; the sample and crop share it. */
+  band?: GuideBand | null;
   successColor?: string;
   warningColor?: string;
   /** Resolved brand primary; the searching state uses it. */
@@ -51,8 +55,8 @@ export function DocumentScanOverlay({
   // second for a canvas that draws itself.
   const startedAt = useRef<number>(0);
   const lockRef = useRef(0);
-  const latest = useRef({ framing, progress, aspect, successColor, warningColor, primaryColor });
-  latest.current = { framing, progress, aspect, successColor, warningColor, primaryColor };
+  const latest = useRef({ framing, progress, aspect, band, successColor, warningColor, primaryColor });
+  latest.current = { framing, progress, aspect, band, successColor, warningColor, primaryColor };
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -117,6 +121,7 @@ export function DocumentScanOverlay({
           scrim: locked ? 0.45 : needsAction ? 0.25 : 0.18,
           pulse: locked ? (Math.sin(phase * Math.PI * 4) + 1) / 2 : 0,
           aspect: s.aspect,
+          band: s.band,
           accent,
         },
       );

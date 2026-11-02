@@ -1,5 +1,10 @@
 import { describe, it, expect } from 'vitest';
-import { documentCropRect, documentGuideRect } from './document-guide';
+import {
+  DOCUMENT_GUIDE_WIDTH_FRACTION,
+  UPRIGHT_GUIDE_BAND_MARGIN,
+  documentCropRect,
+  documentGuideRect,
+} from './document-guide';
 
 // A landscape sensor frame inside a tall portrait phone viewport — the case the
 // shutter got wrong: object-cover shows a narrow slice, so storing the whole
@@ -134,5 +139,54 @@ describe('documentCropRect', () => {
     })!;
     expect(crop.width).toBeGreaterThanOrEqual(1);
     expect(crop.height).toBeGreaterThanOrEqual(1);
+  });
+});
+
+describe('documentGuideRect for an upright slip', () => {
+  // A NIN slip turned upright on a phone (lib/document-turn.ts).
+  const UPRIGHT = 1 / 2.07;
+  const VIEW = { width: 390, height: 844 };
+  // Badges end at 100 px; the hint and shutter start at 648 px.
+  const BAND = { top: 100, bottom: 648 };
+
+  it('fits the free band between the controls, less the margin', () => {
+    const guide = documentGuideRect(VIEW, UPRIGHT, BAND);
+    expect(guide.y).toBeCloseTo(BAND.top + UPRIGHT_GUIDE_BAND_MARGIN, 5);
+    expect(guide.y + guide.height).toBeCloseTo(BAND.bottom - UPRIGHT_GUIDE_BAND_MARGIN, 5);
+    expect(guide.width / guide.height).toBeCloseTo(UPRIGHT, 5);
+    expect(guide.x).toBeCloseTo((VIEW.width - guide.width) / 2, 5);
+  });
+
+  it('is longer than the landscape slip guide on the same phone', () => {
+    const upright = documentGuideRect(VIEW, UPRIGHT, BAND);
+    const landscape = documentGuideRect(VIEW, 2.07, BAND);
+    expect(upright.height).toBeGreaterThan(landscape.width * 1.4);
+  });
+
+  it('caps its width at the usual share of the screen in a deep band', () => {
+    const guide = documentGuideRect({ width: 390, height: 2000 }, UPRIGHT, { top: 0, bottom: 2000 });
+    expect(guide.width).toBeCloseTo(390 * DOCUMENT_GUIDE_WIDTH_FRACTION, 5);
+    expect(guide.width / guide.height).toBeCloseTo(UPRIGHT, 5);
+  });
+
+  it('leaves a landscape guide exactly as it was, band or not', () => {
+    expect(documentGuideRect(VIEW, 2.07, BAND)).toEqual(documentGuideRect(VIEW, 2.07));
+    expect(documentGuideRect(VIEW, CARD, BAND)).toEqual(documentGuideRect(VIEW, CARD));
+  });
+
+  it('falls back to the width-led guide without a band, or with an empty one', () => {
+    expect(documentGuideRect(VIEW, UPRIGHT, { top: 500, bottom: 505 })).toEqual(documentGuideRect(VIEW, UPRIGHT));
+    const guide = documentGuideRect(VIEW, UPRIGHT);
+    expect(guide.height).toBeLessThanOrEqual(VIEW.height);
+  });
+
+  it('crops the same band-fitted rectangle the overlay draws', () => {
+    const frame = { width: 1080, height: 1920 };
+    const guide = documentGuideRect(VIEW, UPRIGHT, BAND);
+    const crop = documentCropRect({ frame, view: VIEW, aspect: UPRIGHT, band: BAND })!;
+    const f = Math.max(VIEW.width / frame.width, VIEW.height / frame.height);
+    expect(crop.y).toBeCloseTo((guide.y + (frame.height * f - VIEW.height) / 2) / f, 0);
+    expect(crop.height).toBeCloseTo(guide.height / f, 0);
+    expect(crop.width / crop.height).toBeCloseTo(UPRIGHT, 1);
   });
 });

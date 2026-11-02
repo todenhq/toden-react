@@ -54,6 +54,12 @@ export const BUSINESS_DETAILS_TEXTS: TextEntry[] = [
       'We could not reach the company register just now. Try again, or enter the details yourself and we will check them when you submit.',
     multiline: true,
   },
+  {
+    key: 'business.search.refused',
+    label: 'Search by name not available',
+    default: 'Search by name is not available for this verification. Enter the registration number.',
+    multiline: true,
+  },
   { key: 'business.search.manualEntry', label: 'Enter details myself link', default: 'Enter the details myself' },
   { key: 'business.details.pickedLabel', label: 'Picked company label', default: 'Business' },
   {

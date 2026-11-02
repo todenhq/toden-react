@@ -1,4 +1,5 @@
 import type { VerificationApi, VerificationStatusResponse, VerifyResponse } from './api';
+import { testRegistrationNumber } from '../lib/test-registration-numbers';
 
 /**
  * Preview-mode API wrapper (builder live preview). Every WRITE is stubbed so
@@ -69,14 +70,28 @@ export function withPreviewMocks(api: VerificationApi): VerificationApi {
     async businessRegions() {
       return { regions: [] };
     },
-    async businessSearch() {
+    async businessSearch(params?: { country?: string }) {
       await delay(300);
+      // In the previewed country's own format, never a Nigerian RC everywhere.
+      const country = params?.country;
       return {
         results: [
-          { name: 'Preview Trading Ltd', registrationNumber: 'RC0000001', status: 'ACTIVE' },
-          { name: 'Preview Holdings Plc', registrationNumber: 'RC0000002', status: 'ACTIVE' },
+          { name: 'Preview Trading Ltd', registrationNumber: testRegistrationNumber(country, 1), status: 'ACTIVE' },
+          { name: 'Preview Holdings Plc', registrationNumber: testRegistrationNumber(country, 2), status: 'ACTIVE' },
         ],
         source: 'preview',
+      };
+    },
+
+    async businessDocumentPeople() {
+      await delay(500);
+      return {
+        read: true,
+        documentType: 'memart',
+        people: [
+          { name: 'Ada Preview', designation: 'DIRECTOR', roles: ['director', 'beneficial_owner'], ownershipPct: 60, email: null },
+          { name: 'Bayo Preview', designation: 'SHAREHOLDER', roles: ['shareholder'], ownershipPct: 40, email: 'bayo@preview.example' },
+        ],
       };
     },
 

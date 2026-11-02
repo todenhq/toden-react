@@ -5,88 +5,57 @@ import { StepHeader } from '../components/StepHeader';
 import { Button } from '../components/ui/button';
 import { useVerificationContext } from '../context/VerificationContext';
 import { useVerificationConfig } from '../context/VerificationConfigContext';
+import { nextBusinessStep, prevBusinessStep } from '../lib/business-application';
 import {
-  nextBusinessStep,
-  prevBusinessStep,
-  resolveBusinessDocumentTypes,
-} from '../lib/business-application';
-import { BusinessDocumentSlot, BUSINESS_DOC_ACCEPTED_MIMES } from './BusinessDocumentSlot';
-import { uploadSizeError } from '../lib/upload-limits';
-import type { BusinessDocumentKey } from '../types/business';
+  businessDocumentGroups,
+  canLeaveGroup,
+  firstOpenGroupIndex,
+  groupUpload,
+} from '../lib/business-document-groups';
 import { useText } from '../i18n';
+import { GroupStack } from './business-documents/GroupStack';
+import { useGroupUpload } from './business-documents/use-group-upload';
 
 /**
- * Business-documents step: one upload slot per configured document type. Each
- * file uploads immediately (type 'business_document'); Continue is blocked
- * until every REQUIRED slot has a mediaId. Uploads are stored in flow state as
- * `[{ type, mediaId, fileName }]` and ride the business /verify submission.
+ * Business-documents step, one GROUP at a time: the documents an organisation
+ * ticks in one group are alternatives, so the applicant uploads one per group
+ * and never says which it is (the server recognises it). The groups are a
+ * vertical stack: the previous group above (press it to change it), the open
+ * group's card, then the next group below. Continue moves the stack on, and
+ * the last group moves on through the flow. An
+ * optional group can be skipped. Back walks the groups before leaving the step.
  */
 export function BusinessDocumentsStep() {
-  const { state, dispatch } = useVerificationContext();
+  const { dispatch } = useVerificationContext();
   const config = useVerificationConfig();
   const t = useText();
-  const slots = resolveBusinessDocumentTypes(config.business, t);
-  const uploads = state.businessApplication.documents;
+  const groups = businessDocumentGroups(config.business, t);
+  const docs = useGroupUpload();
+  const [active, setActive] = useState(() => firstOpenGroupIndex(groups, docs.uploads));
 
-  const [uploadingKey, setUploadingKey] = useState<BusinessDocumentKey | null>(null);
-  const [errors, setErrors] = useState<Partial<Record<BusinessDocumentKey, string>>>({});
-  // In-memory Files for tap-to-preview (lost on remount — the row degrades to
-  // the plain uploaded state; the mediaId in flow state is what matters).
-  const [files, setFiles] = useState<Partial<Record<BusinessDocumentKey, File>>>({});
+  const index = Math.min(active, Math.max(groups.length - 1, 0));
+  const group = groups[index];
+  const hasUpload = group ? groupUpload(group, docs.uploads) !== null : true;
+  const canContinue = group ? canLeaveGroup(group, docs.uploads) : true;
 
-  const uploadFor = (key: BusinessDocumentKey) => uploads.find((d) => d.type === key) ?? null;
-  const setError = (key: BusinessDocumentKey, message: string | null) =>
-    setErrors((prev) => ({ ...prev, [key]: message ?? undefined }));
-
-  const handlePick = async (key: BusinessDocumentKey, file: File) => {
-    setError(key, null);
-    if (!BUSINESS_DOC_ACCEPTED_MIMES.includes((file.type.split(';')[0] || '').toLowerCase())) {
-      setError(key, t('business.documents.errorFileType'));
-      return;
-    }
-    const sizeError = uploadSizeError(file.type, file.size);
-    if (sizeError) {
-      setError(key, sizeError);
-      return;
-    }
-    setUploadingKey(key);
-    try {
-      const mediaId = await config.api.upload(file, 'business_document');
-      setFiles((prev) => ({ ...prev, [key]: file }));
-      dispatch({
-        type: 'SET_BUSINESS_APPLICATION',
-        payload: {
-          documents: [
-            ...state.businessApplication.documents.filter((d) => d.type !== key),
-            { type: key, mediaId, fileName: file.name },
-          ],
-        },
-      });
-    } catch {
-      setError(key, t('business.documents.errorUpload'));
-    } finally {
-      setUploadingKey(null);
-    }
+  const open = (next: number) => {
+    docs.clearError();
+    setActive(next);
   };
-
-  const handleRemove = (key: BusinessDocumentKey) => {
-    setFiles((prev) => ({ ...prev, [key]: undefined }));
-    dispatch({
-      type: 'SET_BUSINESS_APPLICATION',
-      payload: { documents: uploads.filter((d) => d.type !== key) },
-    });
-  };
-
-  const requiredComplete = slots.every((slot) => !slot.required || uploadFor(slot.key) !== null);
 
   const handleContinue = () => {
-    if (!requiredComplete) return;
-    const next = nextBusinessStep('business-documents', config);
-    if (next === 'submitted') {
-      dispatch({ type: 'SUBMIT_VERIFICATION' });
-    } else {
-      dispatch({ type: 'SET_STEP', payload: next });
+    if (!canContinue) return;
+    if (index < groups.length - 1) {
+      open(index + 1);
+      return;
     }
+    const next = nextBusinessStep('business-documents', config);
+    dispatch(next === 'submitted' ? { type: 'SUBMIT_VERIFICATION' } : { type: 'SET_STEP', payload: next });
+  };
+
+  const handleBack = () => {
+    if (index > 0) open(index - 1);
+    else dispatch({ type: 'SET_STEP', payload: prevBusinessStep('business-documents', config) });
   };
 
   return (
@@ -94,33 +63,22 @@ export function BusinessDocumentsStep() {
       <StepHeader
         title={t('business.documents.title')}
         description={t('business.documents.description')}
-        onBack={() =>
-          dispatch({ type: 'SET_STEP', payload: prevBusinessStep('business-documents', config) })
-        }
+        onBack={handleBack}
       />
 
-      <div className="space-y-3">
-        {slots.map((slot) => (
-          <BusinessDocumentSlot
-            key={slot.key}
-            label={slot.label}
-            required={slot.required}
-            fileName={uploadFor(slot.key)?.fileName ?? null}
-            file={files[slot.key] ?? null}
-            uploading={uploadingKey === slot.key}
-            error={errors[slot.key] ?? null}
-            onPick={(file) => void handlePick(slot.key, file)}
-            onRemove={() => handleRemove(slot.key)}
-          />
-        ))}
-      </div>
+      {group && <GroupStack groups={groups} active={index} docs={docs} onOpen={open} />}
 
       <Button
         onClick={handleContinue}
-        disabled={!requiredComplete || uploadingKey !== null}
+        disabled={!canContinue || docs.uploading !== null}
+        variant={!hasUpload && canContinue ? 'outline' : 'default'}
         className="w-full"
       >
-        {t('common.continue')}
+        {!hasUpload && canContinue
+          ? t('business.documents.skip')
+          : index < groups.length - 1
+            ? t('business.documents.next')
+            : t('common.continue')}
       </Button>
     </div>
   );

@@ -30,6 +30,7 @@ import { previewSelectionForSupportingDocuments } from './lib/supporting-documen
 import { resetIntegritySignals } from './lib/integrity-signals';
 import { persistentDeviceId } from './lib/fingerprint';
 import { startSessionOnce } from './lib/start-session-once';
+import { setUploadSessionId } from './lib/upload-session';
 import {
   HandoffAttemptChangedError,
   handoffRootTemplate,
@@ -173,6 +174,9 @@ function VerificationInner({
   enableDocumentCapture,
   allowDocumentUpload,
   allowDocumentScan,
+  documentReview,
+  documentAudio,
+  livenessAudio,
   enableLiveness,
   livenessMode,
   flashSequenceLength,
@@ -237,6 +241,9 @@ function VerificationInner({
     ...(enableDocumentCapture !== undefined ? { enableDocumentCapture } : {}),
     ...(allowDocumentUpload !== undefined ? { allowDocumentUpload } : {}),
     ...(allowDocumentScan !== undefined ? { allowDocumentScan } : {}),
+    ...(documentReview !== undefined ? { documentReview } : {}),
+    ...(documentAudio !== undefined ? { documentAudio } : {}),
+    ...(livenessAudio !== undefined ? { livenessAudio } : {}),
     ...(enableLiveness !== undefined ? { enableLiveness } : {}),
     ...(livenessMode !== undefined ? { livenessMode } : {}),
     ...(flashSequenceLength !== undefined ? { flashSequenceLength } : {}),
@@ -269,7 +276,7 @@ function VerificationInner({
     ...(userData ? { userData } : {}),
     ...(businessPrefill ? { businessPrefill } : {}),
     ...(assetsBasePath ? { assetsBasePath } : {}),
-  }), [country, workflowId, idTypes, countries, multiId, enableSelfie, enableDocumentCapture, allowDocumentUpload, allowDocumentScan, enableLiveness, livenessMode, flashSequenceLength, livenessBrightScreen, selfieReview, deviceIntelligence, deviceHandoff, consentStep, silentCapture, biometric, requireMobileDevice, voiceGuidance, showThemeToggle, progressStyle, fullScreen, disableClose, appearance, consent, success, texts, emailVerification, phoneVerification, questionnaire, proofOfAddress, supportingDocuments, addressCollection, nfc, metadata, userId, userData, businessPrefill, assetsBasePath]);
+  }), [country, workflowId, idTypes, countries, multiId, enableSelfie, enableDocumentCapture, allowDocumentUpload, allowDocumentScan, documentReview, documentAudio, livenessAudio, enableLiveness, livenessMode, flashSequenceLength, livenessBrightScreen, selfieReview, deviceIntelligence, deviceHandoff, consentStep, silentCapture, biometric, requireMobileDevice, voiceGuidance, showThemeToggle, progressStyle, fullScreen, disableClose, appearance, consent, success, texts, emailVerification, phoneVerification, questionnaire, proofOfAddress, supportingDocuments, addressCollection, nfc, metadata, userId, userData, businessPrefill, assetsBasePath]);
 
   // Pre-load MediaPipe Face Mesh model as soon as the SDK mounts and apply the
   // voice-guidance config (enabled + language) for the spoken liveness prompts.
@@ -434,6 +441,7 @@ function VerificationInner({
         // answer belongs to an attempt nobody is looking at any more.
         if (sessionScopeRef.current !== sessionScope) return started;
         dispatch({ type: 'SET_SESSION_ID', payload: started.sessionId });
+        setUploadSessionId(started.sessionId);
         // Resuming: put the user back where they were. Media references have been
         // pruned server-side of anything that expired, so a restored capture slot
         // is one whose bytes genuinely still exist.
@@ -564,6 +572,9 @@ function VerificationInner({
       enableDocumentCapture={enableDocumentCapture}
       allowDocumentUpload={allowDocumentUpload}
       allowDocumentScan={allowDocumentScan}
+      documentReview={documentReview}
+      documentAudio={documentAudio}
+      livenessAudio={livenessAudio}
       enableLiveness={enableLiveness}
       livenessMode={livenessMode}
       flashSequenceLength={flashSequenceLength}
@@ -760,6 +771,7 @@ function WorkflowGate(props: VerificationInnerProps) {
         geoCountry: state.flow.geoCountry,
         addressSearch: state.flow.addressSearch,
         addressSearchMode: state.flow.addressSearchMode,
+        addressBook: state.flow.addressBook,
         mapsFrameUrl: state.flow.mapsFrameUrl,
       }}
     />
@@ -788,7 +800,7 @@ export function Verification<C extends AnyCountry>(props: VerificationProps<C>) 
     // Shadow-DOM style isolation: the SDK carries its own stylesheet and the
     // host app's CSS cannot reach in (nor the SDK's out). `styleIsolation={
     // false}` restores the light-DOM mount, which needs the global
-    // `@myazahq/kyc-sdk-react/styles.css` import — the hosted page's mode.
+    // `@toden/react/styles.css` import — the hosted page's mode.
     <SdkFrame isolate={props.styleIsolation !== false}>
       <VerificationProvider>
         {props.workflowId ? <WorkflowGate {...inner} /> : <VerificationInner {...inner} />}

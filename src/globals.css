@@ -262,6 +262,11 @@
   100% { transform: translateY(0); opacity: 1; }
 }
 
+@keyframes slide-down {
+  0% { transform: translateY(-16px); opacity: 0; }
+  100% { transform: translateY(0); opacity: 1; }
+}
+
 @keyframes fade-in {
   0% { opacity: 0; }
   100% { opacity: 1; }
@@ -357,6 +362,30 @@
   100% { top: 100%; opacity: 0; }
 }
 
+/* The key-people step while a company document is read for its people
+   (steps/KeyPeopleReadingScreen.tsx): a beam sweeps down the page and, as it
+   reaches each person, their line lights up and a card for them lifts off the
+   page into the stack beside it. One 3.6s linear sweep, so the beam and the
+   people stay in step (the delays on each row are its share of the sweep).
+   Transform and opacity only. */
+@keyframes doc-scan {
+  0% { transform: translateY(-2.5rem); opacity: 0; }
+  6% { opacity: 1; }
+  92% { opacity: 1; }
+  100% { transform: translateY(13rem); opacity: 0; }
+}
+@keyframes doc-lift {
+  0% { opacity: 0; transform: translateX(-3.5rem) scale(0.7); }
+  9% { opacity: 1; transform: translateX(0.25rem) scale(1.03); }
+  14%, 72% { opacity: 1; transform: translateX(0) scale(1); }
+  86%, 100% { opacity: 0; transform: translateX(0.5rem) scale(0.98); }
+}
+@keyframes doc-row {
+  0% { opacity: 0; }
+  6% { opacity: 1; }
+  24%, 100% { opacity: 0; }
+}
+
 @layer utilities {
   .animate-liveness-scan {
     animation: liveness-scan 550ms ease-in-out 150ms both;
@@ -369,6 +398,9 @@
   }
   .animate-slide-up {
     animation: slide-up 300ms ease-out;
+  }
+  .animate-slide-down {
+    animation: slide-down 300ms ease-out;
   }
   .animate-fade-in {
     animation: fade-in 250ms ease-out;
@@ -410,6 +442,15 @@
   }
   .animate-capture-flash {
     animation: capture-flash 600ms ease-out forwards;
+  }
+  .animate-doc-scan {
+    animation: doc-scan 3.6s linear infinite;
+  }
+  .animate-doc-lift {
+    animation: doc-lift 3.6s cubic-bezier(0.22, 1, 0.36, 1) infinite backwards;
+  }
+  .animate-doc-row {
+    animation: doc-row 3.6s ease-out infinite backwards;
   }
   .font-heading {
     font-family: var(--font-heading);
@@ -470,8 +511,24 @@
     animation: none;
   }
 
+  /* The document read: the page stays still with its people shown; the
+     status line beside it still says what is happening. */
+  .verification-root .animate-doc-scan {
+    animation: none;
+    opacity: 0;
+  }
+  .verification-root .animate-doc-lift {
+    animation: none;
+    opacity: 1;
+  }
+  .verification-root .animate-doc-row {
+    animation: none;
+    opacity: 0;
+  }
+
   .verification-root .animate-fade-in,
   .verification-root .animate-slide-up,
+  .verification-root .animate-slide-down,
   .verification-root .animate-lighting-in,
   .verification-root .animate-checkmark,
   .verification-root .animate-avatar-slide-in {

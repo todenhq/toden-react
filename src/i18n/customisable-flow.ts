@@ -76,10 +76,25 @@ export const FLOW_TEXTS: Record<string, TextAvailability> = {
     ],
     { ...ADDRESS, subject: 'individual' },
   ),
-  ...all(['address.pin.title.business', 'address.review.title.business', 'address.review.badge.business'], {
-    ...ADDRESS,
-    subject: 'business',
-  }),
+  // The "allow all the time" screen (mobile only): its title, description
+  // and buttons, and the success card's title when checks stay off. Its
+  // reasons and what-to-tap hints keep the SDK's wording (the 300 cap).
+  ...all(['address.background.allow', 'address.background.later', 'address.presence.off.title'], ADDRESS),
+  ...all(['address.background.title', 'address.background.description'], { ...ADDRESS, subject: 'individual' }),
+  ...all(
+    ['address.background.title.business', 'address.background.description.business'],
+    { ...ADDRESS, subject: 'business' },
+  ),
+  ...all(
+    [
+      'address.search.title.business',
+      'address.pin.title.business',
+      'address.entrance.description.photo.business',
+      'address.review.title.business',
+      'address.review.badge.business',
+    ],
+    { ...ADDRESS, subject: 'business' },
+  ),
 
   ...all(
     [

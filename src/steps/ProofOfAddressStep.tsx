@@ -15,6 +15,8 @@ import { isPdfMime, uploadSizeError } from '../lib/upload-limits';
 import { hasSupportingDocumentsStep, verifiedIdsFromState } from '../lib/supporting-documents';
 import type { PoaDocumentType } from '../types/config';
 import { useText } from '../i18n';
+import { businessKey } from '../i18n/business-variants';
+import { isScopedBusiness } from '../lib/scope';
 
 const ACCEPTED_MIMES = ['image/jpeg', 'image/png', 'image/webp', 'application/pdf'];
 
@@ -117,7 +119,10 @@ export function ProofOfAddressStep() {
     <div className="space-y-6 animate-slide-up">
       <StepHeader
         title={t('proofOfAddress.title')}
-        description={t(nameNeeded ? 'proofOfAddress.description' : 'proofOfAddress.description.noName', { days: maxAgeDays })}
+        description={t(
+          businessKey(nameNeeded ? 'proofOfAddress.description' : 'proofOfAddress.description.noName', isScopedBusiness(config)),
+          { days: maxAgeDays },
+        )}
         onBack={handleBack}
       />
 

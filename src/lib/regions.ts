@@ -68,6 +68,11 @@ for (const [region, codes] of Object.entries(REGION_SETS) as Array<[Region, stri
   for (const code of codes) BY_CODE.set(code, region);
 }
 
+/** The region an ISO code is filed under ('Other' when the map has none). */
+export function regionOf(code: string): Region {
+  return BY_CODE.get(code.toUpperCase()) ?? 'Other';
+}
+
 /** Every ISO code in the region map — the "all countries" picker source. */
 export const ALL_REGION_CODES: string[] = Object.values(REGION_SETS).flat();
 

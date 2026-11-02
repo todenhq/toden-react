@@ -13,6 +13,7 @@ import { BUSINESS_DOCUMENT_LABELS } from './business-application';
 import type { BusinessDocumentKey } from '../types/business';
 import { defaultText } from '../i18n/translate';
 import type { TextFn } from '../i18n/types';
+import { businessDocumentGroupTitle } from './business-document-groups';
 
 /** Which operation failed — picks the fallback code for non-HTTP failures. */
 export type ErrorContext = 'upload' | 'verify';
@@ -55,6 +56,9 @@ function toNum(v: unknown): number | undefined {
 const CODED_ERRORS: Record<string, { code: VerificationErrorCode; key: string }> = {
   workflow_not_found: { code: 'invalid_workflow', key: 'general.error.workflowNotFound' },
   workflow_subject_mismatch: { code: 'invalid_workflow', key: 'general.error.workflowSubjectMismatch' },
+  // The reference names a record of the other type (a business flow naming a
+  // person, or the reverse): a configuration problem, not something a retry fixes.
+  entity_type_mismatch: { code: 'invalid_workflow', key: 'general.error.entityTypeMismatch' },
   business_verifications_disabled: { code: 'feature_disabled', key: 'general.error.businessVerificationsDisabled' },
   country_mismatch: { code: 'invalid_workflow', key: 'general.error.countryMismatch' },
   product_unsupported: { code: 'invalid_workflow', key: 'general.error.productUnsupported' },
@@ -80,10 +84,14 @@ export function mapToVerificationError(err: unknown, context: ErrorContext, t: T
     // 422 missing_documents carries the missing doc keys — name them so the
     // user knows exactly which required business documents to go back for.
     if (err.code === 'missing_documents') {
+      // A server that asks one document per group names the groups; an
+      // older one names each document.
+      const groups = Array.isArray(err.body?.missingGroups) ? (err.body.missingGroups as string[]) : [];
       const missing = Array.isArray(err.body?.missing) ? (err.body.missing as string[]) : [];
-      const labels = missing.map(
-        (key) => BUSINESS_DOCUMENT_LABELS[key as BusinessDocumentKey] ?? key,
-      );
+      const groupLabels = groups.flatMap((key) => businessDocumentGroupTitle(key, t) ?? []);
+      const labels = groupLabels.length > 0
+        ? groupLabels
+        : missing.map((key) => BUSINESS_DOCUMENT_LABELS[key as BusinessDocumentKey] ?? key);
       return new VerificationError(
         'unknown',
         labels.length > 0

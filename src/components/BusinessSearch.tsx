@@ -7,17 +7,18 @@
 // a search of their own filing cabinet, which is where KYB applications are
 // abandoned.
 //
-// The search itself is FREE and read-only. Only picking a result runs the paid
-// register check, which is why selection is an explicit act rather than
-// something that happens as they type.
-import { useEffect, useState } from 'react';
+// The search is read-only and free on most registers; where a register charges
+// per search the org pays, so the attempt session rides along. Picking a result
+// runs the register check, which is why selection is an explicit act rather
+// than something that happens as they type.
+import { useState } from 'react';
 import { Search, Loader2, Building2, TriangleAlert, PenLine, Filter } from './icons';
 import { Button } from './ui/button';
 import { CountryFlag } from './CountryFlag';
-import { UiSelect } from './UiSelect';
-import { Label } from './ui/label';
+import { BusinessRegionField, useBusinessRegions } from './BusinessRegionField';
 import { useVerificationConfig } from '../context/VerificationConfigContext';
 import { useText } from '../i18n';
+import { businessSearchRefusal } from '../lib/business-search';
 
 export interface BusinessHit {
   name: string;
@@ -37,6 +38,8 @@ export function BusinessSearch({
   region,
   onRegion,
   onManualEntry,
+  onRefused,
+  sessionId,
   disabled,
 }: {
   country: string;
@@ -45,6 +48,11 @@ export function BusinessSearch({
   region: string;
   onRegion: (code: string) => void;
   onManualEntry: () => void;
+  /** The server refused search by name for this attempt (the server's message,
+   *  or null): the step moves to registration-number entry. */
+  onRefused: (message: string | null) => void;
+  /** The attempt session, the same id the register check sends. */
+  sessionId?: string | null;
   disabled?: boolean;
 }) {
   const config = useVerificationConfig();
@@ -56,24 +64,7 @@ export function BusinessSearch({
   // searches ONE register at a time. Without the region it fails closed, which
   // is right: a company filed a state away would otherwise come back "not
   // registered", and that is a finding nobody has earned.
-  const [regions, setRegions] = useState<{ code: string; name: string }[]>([]);
-
-  useEffect(() => {
-    let cancelled = false;
-    setRegions([]);
-    if (!country) return undefined;
-    config.api
-      .businessRegions(country)
-      .then((r) => {
-        if (!cancelled) setRegions(r.regions ?? []);
-      })
-      // An empty list means "do not ask", which is also the safe answer when
-      // the catalogue is unreachable: the search says so on its own.
-      .catch(() => undefined);
-    return () => {
-      cancelled = true;
-    };
-  }, [country, config.api]);
+  const regions = useBusinessRegions(country);
   // Choosing a row IS the choice: it swaps the list for the chosen company, and
   // Change swaps back. A separate confirm button meant two primary buttons on
   // screen at once, and the card it lands on already shows what was picked, so
@@ -96,10 +87,19 @@ export function BusinessSearch({
         query: q,
         limit: 50,
         ...(region ? { subdivisionCode: region } : {}),
+        sessionId,
       });
       const hits = res.results ?? [];
       setState({ phase: 'results', hits, truncated: hits.length >= 50 });
-    } catch {
+    } catch (err) {
+      // Search by name is not coming back for this attempt (switched off, no
+      // session, the org cannot pay, too many searches): straight to the number.
+      const refusal = businessSearchRefusal(err);
+      if (refusal) {
+        setState({ phase: 'idle' });
+        onRefused(refusal.message);
+        return;
+      }
       // Deliberately NOT an empty result list. "No matches" reads as "this
       // business is not registered", which is a claim an outage has not earned.
       setState({ phase: 'unavailable' });
@@ -123,27 +123,7 @@ export function BusinessSearch({
   return (
     <div className="space-y-3">
       <div className="space-y-3">
-        {regions.length > 0 && (
-          <div className="space-y-2">
-            <Label htmlFor="business-region">{t('business.search.regionLabel')}</Label>
-            {/* Searchable: fifty US states unfiltered is a scroll-and-hunt for
-                a word the person already knows how to spell. The flag is the
-                country's, because every option here belongs to it. */}
-            <UiSelect
-              id="business-region"
-              value={region || undefined}
-              options={regions.map((r) => ({
-                value: r.code,
-                label: r.name,
-                icon: <CountryFlag code={country} className="h-4 w-4 shrink-0" />,
-              }))}
-              onChange={onRegion}
-              searchable
-              placeholder={t('business.search.regionPlaceholder')}
-              aria-label="State or region of registration"
-            />
-          </div>
-        )}
+        <BusinessRegionField country={country} regions={regions} region={region} onRegion={onRegion} />
 
         <div className="relative">
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />

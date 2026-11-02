@@ -56,6 +56,8 @@ export interface ServerSdkConfig {
   addressSearch?: boolean;
   /** Which search backend ('autocomplete' | 'basic'). */
   addressSearchMode?: 'autocomplete' | 'basic';
+  /** The Toden address book on this organisation (save + reuse switches). */
+  addressBook?: { save: boolean; reuse: boolean };
   /** Loader error message, if `status === 'error'`. */
   error?: string;
   /** HTTP status of the failed config request, if `status === 'error'`. */
@@ -134,6 +136,11 @@ export interface VerificationConfigValue {
   allowDocumentUpload?: boolean;
   /** Allow scanning the document live with the camera. Default true; stays on when upload is also off. */
   allowDocumentScan?: boolean;
+  /** Show the review screen after a document scan. On unless `false`. */
+  documentReview?: boolean;
+  /** Record sound on the document clip. Off unless `true`. */
+  documentAudio?: boolean;
+  livenessAudio?: boolean;
   enableLiveness?: boolean;
   /** Presence Intelligence method: gestures (default) | flash | both. */
   livenessMode?: 'gestures' | 'flash' | 'both' | 'passive';
@@ -179,7 +186,7 @@ export interface VerificationConfigValue {
   requireMobileDevice?: boolean;
   /**
    * Base path (or absolute URL) where gesture GIFs are served from.
-   * Defaults to `'/kyc-assets'`. Copy `node_modules/@myazahq/kyc-sdk-react/gifs/`
+   * Defaults to `'/kyc-assets'`. Copy `node_modules/@toden/react/gifs/`
    * to that path, or set an absolute CDN URL to serve them remotely.
    */
   assetsBasePath?: string;
@@ -428,6 +435,7 @@ export function VerificationConfigProvider({ children, apiOverride, serverConfig
           mapsFrameUrl: res.mapsFrameUrl,
           addressSearch: res.addressSearch,
           addressSearchMode: res.addressSearchMode,
+          addressBook: res.addressBook,
         });
       })
       .catch((err: unknown) => {
@@ -500,6 +508,9 @@ export function VerificationConfigProvider({ children, apiOverride, serverConfig
       config.enableDocumentCapture,
       config.allowDocumentUpload,
       config.allowDocumentScan,
+      config.documentReview,
+      config.documentAudio,
+      config.livenessAudio,
       config.enableLiveness,
       config.livenessMode,
       config.flashSequenceLength,

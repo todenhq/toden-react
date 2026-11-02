@@ -4,6 +4,7 @@ import type { WorkflowScope } from '../lib/scope';
 import type { ApplicantOutcome } from '../services/api';
 import type { TerminalTone } from './SubmittedScreens';
 import { defaultText } from '../i18n/translate';
+import { businessKey } from '../i18n/business-variants';
 import type { TextFn } from '../i18n/types';
 
 // ─── What a DECIDED session says when its applicant comes back ──────────────
@@ -93,6 +94,9 @@ export function decidedCopy(
         return { tone: TONE_OF[r.tone], title: r.title, description: r.description };
       }
       const kind: Kind = ctx.scope ?? (ctx.isBusiness ? 'business' : 'individual');
+      // A scoped business check names the business (i18n/business-variants.ts).
+      const described = (verdict: 'approved' | 'declined') =>
+        t(businessKey(`result.completed.${verdict}.description.${KIND_KEY[kind]}`, ctx.isBusiness && ctx.scope !== null));
       return outcome === 'approved'
         ? {
             tone: 'success',
@@ -101,12 +105,12 @@ export function decidedCopy(
                 ? 'result.completed.approved.title.faceEnrolment'
                 : 'result.completed.approved.title',
             ),
-            description: ctx.reason || t(`result.completed.approved.description.${KIND_KEY[kind]}`),
+            description: ctx.reason || described('approved'),
           }
         : {
             tone: 'declined',
             title: t('result.completed.declined.title'),
-            description: ctx.reason || t(`result.completed.declined.description.${KIND_KEY[kind]}`),
+            description: ctx.reason || described('declined'),
           };
     }
   }

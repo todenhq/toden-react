@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import type { AwaitingPersonPayload, VerificationApi } from '../services/api';
+import { keepReadingSummary, summaryOwnershipPending } from '../lib/ownership-pending';
 
 // The SERVER's list of who a submitted KYB application is waiting on.
 //
@@ -15,7 +16,10 @@ import type { AwaitingPersonPayload, VerificationApi } from '../services/api';
 // STATUS stays live. The people on the list go and verify AFTER this screen is
 // first shown, and an applicant sitting on it deserves to see a row turn green
 // without hunting for a reload button. Discovery is finished by then, so these
-// re-reads can only flip badges, never move the list.
+// re-reads can only flip badges, never move the list. The one exception is
+// shareholders a slow register sends late (`keyPeopleOwnershipPending`): they
+// join the list with their invite links when they arrive, so the re-reads go
+// on while that is true and the screen says the links are coming.
 //
 // Works for BOTH mount kinds: a hosted page reads by its session token, an
 // embedded mount by its sessionId under the API key (the authed summary route).
@@ -39,22 +43,20 @@ const GIVE_UP_MS = 15_000;
 /** How often statuses refresh once the list is settled, while anybody owes a check. */
 const POLL_MS = 20_000;
 
-/** Anything that can still change: an open check, or a failure they may retry. */
-function anyoneStillOwes(people: AwaitingPersonPayload[]): boolean {
-  return people.some((p) => p.status === 'pending' || p.status === 'submitted' || p.status === 'failed');
-}
-
 export interface AwaitingPeople {
   /** Null until the answer is final. The screen renders nothing before that. */
   people: AwaitingPersonPayload[] | null;
+  /** Shareholders from the register are still on their way (lib/ownership-pending.ts). */
+  ownershipPending: boolean;
 }
 
 export function useAwaitingPeople(
   api: VerificationApi,
   ref: { token?: string; sessionId?: string | null },
   enabled: boolean,
-): AwaitingPersonPayload[] | null {
+): AwaitingPeople {
   const [people, setPeople] = useState<AwaitingPersonPayload[] | null>(null);
+  const [ownershipPending, setOwnershipPending] = useState(false);
   const { token, sessionId } = ref;
 
   useEffect(() => {
@@ -79,7 +81,11 @@ export function useAwaitingPeople(
       if (summary && (summary.keyPeopleSettled !== false || expired)) {
         committed = true;
         setPeople(summary.keyPeople);
-        if (anyoneStillOwes(summary.keyPeople)) {
+        const pending = summaryOwnershipPending(summary);
+        setOwnershipPending(pending);
+        // Still settling past the give-up (a slow document read adding
+        // people): keep reading so they appear, even if nobody else owes a check.
+        if (keepReadingSummary(summary.keyPeople, pending) || summary.keyPeopleSettled === false) {
           timer = setTimeout(() => void read(), POLL_MS);
         }
         return;
@@ -115,5 +121,5 @@ export function useAwaitingPeople(
     };
   }, [api, token, sessionId, enabled]);
 
-  return people;
+  return { people, ownershipPending };
 }

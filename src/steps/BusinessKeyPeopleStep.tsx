@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState } from 'react';
 import { StepHeader } from '../components/StepHeader';
 import { Button } from '../components/ui/button';
 import { useVerificationContext } from '../context/VerificationContext';
@@ -16,6 +16,7 @@ import {
 } from '../lib/business-application';
 import { type KeyPeopleSection as SectionKey } from '../lib/key-people-sections';
 import { KeyPeopleSectionsList } from './KeyPeopleSectionsList';
+import { keyPeopleRequireOwnership } from '../lib/key-person-stake';
 import { KeyPersonSheet } from './KeyPersonSheet';
 import { KeyPeopleTotals } from './KeyPeopleTotals';
 import {
@@ -25,7 +26,10 @@ import {
 } from './key-people-step-model';
 import { KeyPeopleHints } from './KeyPeopleHints';
 import type { KeyPersonEntry } from '../context/types';
-import { prefillKeyPeople, shouldPrefill } from '../lib/key-people-prefill';
+import { useKeyPeoplePrefill } from './use-key-people-prefill';
+import { KeyPeopleDocumentsNote } from './KeyPeopleDocumentsNote';
+import { KeyPeopleReadingScreen } from './KeyPeopleReadingScreen';
+import { useReadingScreen } from './use-reading-screen';
 import { defaultCountry as resolveCountry } from '../lib/country-default';
 import { useText } from '../i18n';
 
@@ -55,6 +59,8 @@ export function BusinessKeyPeopleStep() {
     ) ?? '';
   const minEntries = keyPeopleMinEntries(config.business);
   const emailRequiredFor = keyPeopleRequireEmail(config.business);
+  // Owners must give a stake unless the workflow turns that off.
+  const stakeRequired = keyPeopleRequireOwnership(config.business);
   // The same line the server draws: the workflow's own threshold, else the
   // register's default (NG files significant control from a lower bar).
   const threshold =
@@ -64,23 +70,13 @@ export function BusinessKeyPeopleStep() {
   const setRows = (keyPeople: KeyPersonEntry[]) =>
     dispatch({ type: 'SET_BUSINESS_APPLICATION', payload: { keyPeople } });
 
-  // Start from the register's own officer list, so this is a confirmation
-  // rather than a memory test. Once only, and never over anything typed: an
-  // applicant who has already entered a name has told us something the
-  // register did not.
-  const prefilled = useRef(false);
-  const officers = state.businessCheck.keyPeople;
-  useEffect(() => {
-    if (prefilled.current || officers.length === 0 || !shouldPrefill(rows)) return;
-    prefilled.current = true;
-    setRows(prefillKeyPeople(officers, defaultCountry));
-    // setRows/rows are intentionally out of the dep list: this must run on the
-    // arrival of officers, not on every edit the applicant then makes.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [officers, defaultCountry]);
+  // The register's officers, then the people the company documents name.
+  const { fromDocuments, readingDocuments, merging, keptFromRemoved } = useKeyPeoplePrefill(rows, defaultCountry);
+  // A full-step screen while the documents are read, so the wait is explained.
+  const reading = useReadingScreen(readingDocuments || merging, fromDocuments);
 
-  const validCount = rows.filter((r) => isKeyPersonRowValid(r, emailRequiredFor)).length;
-  const invalidRows = invalidKeyPersonRows(rows, emailRequiredFor);
+  const validCount = rows.filter((r) => isKeyPersonRowValid(r, emailRequiredFor, stakeRequired)).length;
+  const invalidRows = invalidKeyPersonRows(rows, emailRequiredFor, stakeRequired);
   const meetsMinimum = validCount >= minEntries;
 
   const pctOf = (row: KeyPersonEntry): number => {
@@ -114,7 +110,7 @@ export function BusinessKeyPeopleStep() {
     if (!canContinue) return;
     // Half-typed rows are dropped rather than submitted: an entry the user
     // abandoned is not a person they disclosed.
-    setRows(rows.filter((r) => isKeyPersonRowValid(r, emailRequiredFor)));
+    setRows(rows.filter((r) => isKeyPersonRowValid(r, emailRequiredFor, stakeRequired)));
     const next = nextBusinessStep('business-key-people', config);
     if (next === 'submitted') {
       dispatch({ type: 'SUBMIT_VERIFICATION' });
@@ -133,48 +129,60 @@ export function BusinessKeyPeopleStep() {
         }
       />
 
-      <KeyPeopleHints rowCount={rows.length} minEntries={minEntries} validCount={validCount} />
+      {reading.show ? (
+        <KeyPeopleReadingScreen found={reading.found} />
+      ) : (
+        <>
+        <KeyPeopleHints rowCount={rows.length} minEntries={minEntries} validCount={validCount} />
 
-      <KeyPeopleSectionsList
-        sections={sections}
-        rows={rows}
-        threshold={threshold}
-        emailRequiredFor={emailRequiredFor}
-        uboUnidentifiable={uboUnidentifiable}
-        canAdd={canAdd}
-        onRows={setRows}
-        onSheet={setSheet}
-        onExemption={(next) =>
-          dispatch({ type: 'SET_BUSINESS_APPLICATION', payload: { uboUnidentifiable: next } })
-        }
-      />
+        {(readingDocuments || fromDocuments > 0 || keptFromRemoved > 0) && (
+          <KeyPeopleDocumentsNote reading={readingDocuments} added={fromDocuments} kept={keptFromRemoved} />
+        )}
 
-      {!canAdd && (
-        <p className="text-center text-sm text-muted-foreground">
-          {t('keyPeople.limit', { count: MAX_KEY_PEOPLE_ROWS })}
-        </p>
-      )}
-
-      <KeyPeopleTotals totalPct={totalPct} overAllocated={overAllocated} />
-
-      <Button onClick={handleContinue} disabled={!canContinue} className="w-full">
-        {t('common.continue')}
-      </Button>
-
-      {sheet && (sheet.mode === 'add' || editEntry) && (
-        <KeyPersonSheet
+        <KeyPeopleSectionsList
+          sections={sections}
+          rows={rows}
+          threshold={threshold}
           emailRequiredFor={emailRequiredFor}
-          defaultCountry={defaultCountry}
-          mode={sheet.mode}
-          section={sheet.section}
-          corporateKyb={config.business?.keyPeople?.corporateKyb?.enabled === true}
-          initial={editEntry ?? emptyKeyPersonEntry(sheet.section, defaultCountry)}
-          uboThreshold={threshold}
-          otherPctTotal={editEntry ? totalPct - pctOf(editEntry) : totalPct}
-          onSave={handleSave}
-          onRemove={sheet.mode === 'edit' ? handleDelete : undefined}
-          onClose={() => setSheet(null)}
+          uboUnidentifiable={uboUnidentifiable}
+          // Owners can still be added by hand; the register's arrive later.
+          ownershipPending={state.businessCheck.ownershipPending === true}
+          canAdd={canAdd}
+          onRows={setRows}
+          onSheet={setSheet}
+          onExemption={(next) =>
+            dispatch({ type: 'SET_BUSINESS_APPLICATION', payload: { uboUnidentifiable: next } })
+          }
         />
+
+        {!canAdd && (
+          <p className="text-center text-sm text-muted-foreground">
+            {t('keyPeople.limit', { count: MAX_KEY_PEOPLE_ROWS })}
+          </p>
+        )}
+
+        <KeyPeopleTotals totalPct={totalPct} overAllocated={overAllocated} />
+
+        <Button onClick={handleContinue} disabled={!canContinue} className="w-full">
+          {t('common.continue')}
+        </Button>
+
+        {sheet && (sheet.mode === 'add' || editEntry) && (
+          <KeyPersonSheet
+            emailRequiredFor={emailRequiredFor}
+            defaultCountry={defaultCountry}
+            mode={sheet.mode}
+            section={sheet.section}
+            corporateKyb={config.business?.keyPeople?.corporateKyb?.enabled === true}
+            initial={editEntry ?? emptyKeyPersonEntry(sheet.section, defaultCountry)}
+            uboThreshold={threshold}
+            otherPctTotal={editEntry ? totalPct - pctOf(editEntry) : totalPct}
+            onSave={handleSave}
+            onRemove={sheet.mode === 'edit' ? handleDelete : undefined}
+            onClose={() => setSheet(null)}
+          />
+        )}
+        </>
       )}
     </div>
   );

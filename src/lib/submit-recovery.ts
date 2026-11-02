@@ -24,6 +24,8 @@ const STEP_FOR_CODE: Readonly<Record<string, VerificationStep>> = {
   // 'address-collection' is the PIN step.
   address_collection_required: 'address-collection',
   missing_address_fields: 'address-collection',
+  address_book_reuse_invalid: 'address-collection',
+  address_book_reuse_stale: 'address-collection',
 };
 
 /** A capture the server could not accept, by the key it names. */

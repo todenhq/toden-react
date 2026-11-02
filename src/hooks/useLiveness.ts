@@ -24,9 +24,12 @@ import {
 import { useText, type TextFn } from '../i18n';
 import { generateFlashSequence, runFlashSequence } from '../liveness/flash-detector';
 import { holdCameraSteady } from '../lib/camera-lock';
-import { recordLivenessSignals } from '../lib/integrity-signals';
+import { recordLivenessSignals, recordPromptTimes } from '../lib/integrity-signals';
+import { recordingStart } from '../liveness/flash-timeline';
+import { PromptTimeline } from '../liveness/prompt-timeline';
 import { speak, stopSpeaking } from '../liveness/speech';
-import type { LightLevel } from './useLightLevel';
+import type { LightLevel, TrackedFace } from './useLightLevel';
+import { faceBoxOf } from '../lib/light-level';
 import {
   CAPTURE_FRAMERATE,
   LIVENESS_VIDEO_BITRATE,
@@ -123,6 +126,11 @@ export interface UseLivenessOptions {
    * rather than the frame. A ref: it changes with layout, never with a frame.
    */
   faceWindowRef?: React.RefObject<FaceWindow | null>;
+  /**
+   * Written with where the face is on every frame, so the light check can
+   * judge the face's skin rather than the room behind it (lib/light-level).
+   */
+  faceRef?: React.MutableRefObject<TrackedFace | null>;
 }
 
 // ---------------------------------------------------------------------------
@@ -157,6 +165,7 @@ export function useLiveness({
   compressImage,
   lightLevel = 'ok',
   faceWindowRef,
+  faceRef,
 }: UseLivenessOptions): UseLivenessReturn {
   const [state, setState] = useState<LivenessState>({ phase: 'loading' });
   // The workflow's copy, read through a ref: the detector loop and setPhase are
@@ -166,6 +175,8 @@ export function useLiveness({
   tRef.current = t;
   const [isFaceDetected, setIsFaceDetected] = useState(false);
   const [challenges, setChallenges] = useState<readonly ChallengeEntry[]>([]);
+  // When each prompt appeared and passed, for the claim (prompt-timeline.ts).
+  const promptsRef = useRef(new PromptTimeline());
   // Incremented by retry() to re-trigger the FaceMesh initialization effect
   const [retryCount, setRetryCount] = useState(0);
 
@@ -327,6 +338,8 @@ export function useLiveness({
     recordLivenessSignals({ mode: config?.mode ?? 'gestures', challenges: picked.map((c) => c.type) });
     const tracker = new ChallengeTracker(picked);
     trackerRef.current = tracker;
+    promptsRef.current.reset();
+    recordPromptTimes(undefined);
     flashRetriesRef.current = 0;
     livenessProgressRef.current = 0;
     setChallenges([...tracker.all]);
@@ -392,6 +405,9 @@ export function useLiveness({
   const startChallengeTimer = useCallback(
     (seconds: number) => {
       clearChallengeTimer();
+      // Every prompt starts here, and a resumed one keeps its first time.
+      const prompt = trackerRef.current?.current?.config.type;
+      if (prompt) promptsRef.current.shown(prompt, performance.now());
       challengeClockRef.current = { startedAt: performance.now(), seconds };
       challengeTimerRef.current = setTimeout(() => {
         if (!mountedRef.current) return;
@@ -454,6 +470,8 @@ export function useLiveness({
     const tracker = trackerRef.current;
     if (!tracker?.current) return;
     clearChallengeTimer();
+    promptsRef.current.passed(performance.now());
+    recordPromptTimes(promptsRef.current.report(recordingStart()));
     tracker.markCurrentPassed();
     setChallenges([...tracker.all]);
     setPhase({ phase: 'challenge_passed', index: tracker.currentIndex });
@@ -631,6 +649,10 @@ export function useLiveness({
 
   processLandmarksRef.current = (landmarks: NormalizedLandmark[] | null, faceCount: number) => {
     if (!mountedRef.current) return;
+    if (faceRef) {
+      const box = faceBoxOf(landmarks);
+      faceRef.current = box ? { box, at: Date.now() } : null;
+    }
     updateLivenessProgress();
 
     const tracker = trackerRef.current;

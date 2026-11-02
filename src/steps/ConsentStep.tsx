@@ -1,6 +1,6 @@
 'use client';
 
-import { configScope, isFaceScope } from '../lib/scope';
+import { configScope, isFaceScope, isScopedBusiness } from '../lib/scope';
 import React from 'react';
 import { ShieldCheck, Lock, RotateCcw } from '../components/icons';
 import { Button } from '../components/ui/button';
@@ -19,13 +19,16 @@ import { ConsentLegalNotice } from './ConsentLegalNotice';
 export function ConsentStep() {
   const { dispatch } = useVerificationContext();
   const config = useVerificationConfig();
+  // The KYB application flow; a SCOPED business workflow is not one (it runs
+  // its scope's own steps), so the scope is read first, whoever it is about.
   const isBusiness = isBusinessFlow(config);
-  const scope = isBusiness ? null : configScope(config);
+  const scope = configScope(config);
+  const scopedBusiness = isScopedBusiness(config);
   const faceScope = isFaceScope(scope);
   const t = useText();
   // Tokens fill from userData. Business details aren't collected until after
   // consent, so {businessName} resolves here only when the integrator passes it.
-  const copyCase = { isBusiness, scope };
+  const copyCase = { isBusiness, scope, scopedBusiness };
   const title = consentTitle(
     { ...copyCase, firstName: config.userData?.firstName, legacy: config.consent?.title },
     t,
@@ -113,7 +116,7 @@ export function ConsentStep() {
         {/* The notice sits IMMEDIATELY above the button it describes: consent is
             now given by acting, so the disclosure has to be adjacent to the act
             for that consent to be informed. */}
-        <ConsentLegalNotice isBusiness={isBusiness} capturesFace={capturesFace} recordsVideo={recordsVideo} />
+        <ConsentLegalNotice isBusiness={isBusiness || scopedBusiness} capturesFace={capturesFace} recordsVideo={recordsVideo} />
 
         <Button onClick={handleContinue} className="w-full">
           {t('common.continue')}

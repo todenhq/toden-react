@@ -5,6 +5,7 @@ import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
 import { PhoneNumberInput } from '../components/PhoneNumberInput';
 import { useText } from '../i18n';
+import { businessKey } from '../i18n/business-variants';
 
 /**
  * The "where should we send it" field on the contact-verification step: a plain
@@ -21,6 +22,7 @@ export function ContactDestinationField({
   defaultCountry,
   geoCountry,
   disabled,
+  scopedBusiness,
 }: {
   isEmail: boolean;
   email: string;
@@ -30,12 +32,14 @@ export function ContactDestinationField({
   /** The visitor's IP country, pinned and tagged at the top of the picker. */
   geoCountry?: string | null;
   disabled?: boolean;
+  /** A scoped business workflow: the field asks for the company's contact. */
+  scopedBusiness?: boolean;
 }) {
   const t = useText();
   if (isEmail) {
     return (
       <div className="space-y-2">
-        <Label htmlFor="contact-destination">{t('contact.email.label')}</Label>
+        <Label htmlFor="contact-destination">{t(businessKey('contact.email.label', scopedBusiness))}</Label>
         <Input
           id="contact-destination"
           type="email"
@@ -52,7 +56,7 @@ export function ContactDestinationField({
 
   return (
     <div className="space-y-2">
-      <Label>{t('contact.phone.label')}</Label>
+      <Label>{t(businessKey('contact.phone.label', scopedBusiness))}</Label>
       <PhoneNumberInput
         defaultCountry={defaultCountry}
         geoCountry={geoCountry}

@@ -15,6 +15,12 @@ export const ADDRESS_FINISH_ENTRIES: TextEntry[] = [
     default: 'A picture of the gate or front door makes the address findable.',
     multiline: true,
   },
+  {
+    key: 'address.entrance.description.photo.business',
+    label: 'Entrance: description (photo, business)',
+    default: 'A photo of the shop front, office entrance or signboard helps show the business trades here.',
+    multiline: true,
+  },
   { key: 'address.entrance.framePill', label: 'Entrance: frame label', default: 'Fit your entrance in the frame' },
   {
     key: 'address.entrance.frameHint',

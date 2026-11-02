@@ -16,6 +16,80 @@ export const KEY_PEOPLE_STEP_TEXTS: TextEntry[] = [
     multiline: true,
   },
   {
+    key: 'keyPeople.hints.ownershipPending',
+    label: 'Hint: shareholders still arriving from the register',
+    default:
+      'We are still getting the shareholders from the register. You can add them now, or they will be added when they arrive.',
+    multiline: true,
+  },
+  { key: 'keyPeople.reading.title', label: 'Reading screen: title', default: 'Reading your company documents' },
+  {
+    key: 'keyPeople.reading.description',
+    label: 'Reading screen: description',
+    default:
+      "We're finding the people your documents name, so you only need to check them and add their emails.",
+    multiline: true,
+  },
+  { key: 'keyPeople.reading.stage1', label: 'Reading screen: looking for directors', default: 'Looking for the directors' },
+  {
+    key: 'keyPeople.reading.stage2',
+    label: 'Reading screen: looking for shareholders',
+    default: 'Looking for the shareholders and their stakes',
+  },
+  { key: 'keyPeople.reading.stage3', label: 'Reading screen: matching the company', default: 'Checking the names belong to your company' },
+  {
+    key: 'keyPeople.reading.slow',
+    label: 'Reading screen: taking longer than usual',
+    default: 'Long documents take a little longer. If it runs on, the list opens in a moment and the people are added when we finish.',
+    multiline: true,
+  },
+  { key: 'keyPeople.reading.foundOne', label: 'Reading screen: one person found', default: 'Found 1 person' },
+  {
+    key: 'keyPeople.reading.foundMany',
+    label: 'Reading screen: several people found',
+    default: 'Found {count} people',
+    placeholders: ['count'],
+  },
+  {
+    key: 'keyPeople.hints.readingDocuments',
+    label: 'Hint: reading the company documents for their people',
+    default:
+      'We are reading your company documents for the people they name. You can add people now, or they will be filled in when we finish.',
+    multiline: true,
+  },
+  {
+    key: 'keyPeople.hints.fromDocumentsOne',
+    label: 'Hint: one person filled in from the company documents',
+    default:
+      'We filled in {count} person from your company documents. Check the details and add their email so we can send their verification link.',
+    placeholders: ['count'],
+    multiline: true,
+  },
+  {
+    key: 'keyPeople.hints.fromDocumentsMany',
+    label: 'Hint: several people filled in from the company documents',
+    default:
+      "We filled in {count} people from your company documents. Check the details and add each person's email so we can send their verification link.",
+    placeholders: ['count'],
+    multiline: true,
+  },
+  {
+    key: 'keyPeople.hints.keptFromRemovedOne',
+    label: 'Hint: one person kept from a removed company document',
+    default:
+      '{count} person came from a document you removed. We kept them because you had changed their details. Check they still belong.',
+    placeholders: ['count'],
+    multiline: true,
+  },
+  {
+    key: 'keyPeople.hints.keptFromRemovedMany',
+    label: 'Hint: several people kept from a removed company document',
+    default:
+      '{count} people came from a document you removed. We kept them because you had changed their details. Check they still belong.',
+    placeholders: ['count'],
+    multiline: true,
+  },
+  {
     key: 'keyPeople.hints.minimumOne',
     label: 'Hint: minimum of one person',
     default: 'List at least {count} person to continue.',
@@ -91,9 +165,11 @@ export const KEY_PEOPLE_STEP_TEXTS: TextEntry[] = [
   { key: 'keyPeople.role.shareholder', label: 'Role: shareholder', default: 'Shareholder' },
   { key: 'keyPeople.card.unnamedCompany', label: 'Card: unnamed company', default: 'Unnamed company' },
   { key: 'keyPeople.card.unnamedPerson', label: 'Card: unnamed person', default: 'Unnamed person' },
+  { key: 'keyPeople.card.documentRemoved', label: 'Card: from a removed document', default: 'From a document you removed. Check they belong.' },
   { key: 'keyPeople.card.company', label: 'Card: company tag', default: 'Company' },
   { key: 'keyPeople.card.ownership', label: 'Card: ownership', default: '{pct}% ownership', placeholders: ['pct'] },
   { key: 'keyPeople.card.emailRequired', label: 'Card: email missing', default: 'Email required, tap to add' },
+  { key: 'keyPeople.card.ownershipRequired', label: 'Card: ownership missing', default: 'Ownership % required, tap to add' },
   { key: 'keyPeople.card.incomplete', label: 'Card: incomplete', default: 'Incomplete, tap to finish' },
   {
     key: 'keyPeople.limit',

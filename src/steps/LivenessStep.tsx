@@ -18,10 +18,12 @@ import { stepAfterCapture } from '../lib/post-capture';
 import { stepBeforeLiveness } from '../lib/contact-steps';
 import { useCamera } from '../hooks/useCamera';
 import { useCameraPrimer } from '../hooks/useCameraPrimer';
+import { useDocumentMicrophone } from '../hooks/useDocumentMicrophone';
+import { recordsLivenessAudio } from '../lib/liveness-audio';
 import { useImageCapture } from '../hooks/useImageCapture';
 import { useImageCompress } from '../hooks/useImageCompress';
 import { useLiveness } from '../hooks/useLiveness';
-import { useLightLevel } from '../hooks/useLightLevel';
+import { useLightLevel, type TrackedFace } from '../hooks/useLightLevel';
 import { primeSpeech } from '../liveness/speech';
 import { recordLivenessSignals, recordRecorderFailure } from '../lib/integrity-signals';
 import { markRecordingStart } from '../liveness/flash-timeline';
@@ -111,9 +113,16 @@ export function LivenessStep() {
   const faceWindowRef = useRef<FaceWindow | null>(null);
   const frameSizeRef = useRef<Size | null>(null);
 
+  const cameraAllowed = ready && !preview && !restoredSelfie && (primerStatus === 'granted' || primed);
+  // Sound on the recording. Answered before the camera opens, because a
+  // recording cannot gain a track once it has started. Refused costs the sound.
+  const wantsAudio = recordsLivenessAudio(config);
+  const microphone = useDocumentMicrophone(wantsAudio && cameraAllowed);
+  const microphoneRef = useRef(microphone.stream);
+  microphoneRef.current = microphone.stream;
   const camera = useCamera({
     facingMode: 'user',
-    enabled: ready && !preview && !restoredSelfie && (primerStatus === 'granted' || primed),
+    enabled: cameraAllowed && (!wantsAudio || microphone.settled),
   });
   const { capture } = useImageCapture({ videoRef: camera.videoRef, mirror: true });
   const { compress, isCompressing } = useImageCompress();
@@ -124,7 +133,10 @@ export function LivenessStep() {
   const livenessMimeRef = useRef('video/webm');
 
   const livenessActive = !preview && camera.isReady;
-  const { level: lightLevel } = useLightLevel(camera.videoRef, livenessActive);
+  // Where Face Mesh last saw the face: the light check reads the face's skin,
+  // never the dark room behind a well-lit person (lib/light-level).
+  const trackedFaceRef = useRef<TrackedFace | null>(null);
+  const { level: lightLevel } = useLightLevel(camera.videoRef, livenessActive, trackedFaceRef);
   const isDim = lightLevel === 'dark';
   const isBright = lightLevel === 'bright';
 
@@ -140,6 +152,7 @@ export function LivenessStep() {
     lightLevel,
     config: { mode: livenessMode, flashSequenceLength: config.flashSequenceLength },
     faceWindowRef,
+    faceRef: trackedFaceRef,
   });
 
   const syncFaceWindow = useCallback(() => {
@@ -241,7 +254,7 @@ export function LivenessStep() {
     if (!camera.stream.getVideoTracks().some((t) => t.readyState === 'live')) return;
 
     livenessChunksRef.current = [];
-    const created = createVideoRecorder(camera.stream, LIVENESS_VIDEO_BITRATE);
+    const created = createVideoRecorder(camera.stream, LIVENESS_VIDEO_BITRATE, microphoneRef.current);
     if (!created) {
       // Report WHY there will be no recording (lib/integrity-signals.ts).
       recordRecorderFailure(pickVideoMimeType() ? 'recorder_start_failed' : 'recorder_unsupported');

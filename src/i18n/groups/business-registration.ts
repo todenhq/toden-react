@@ -34,6 +34,13 @@ export const BUSINESS_REGISTRATION_TEXTS: TextEntry[] = [
     multiline: true,
   },
   {
+    key: 'business.registration.tipGhana',
+    label: 'Tip: Ghana',
+    default:
+      'Your registration number from the Office of the Registrar of Companies: CS for a company, BN for a business name or PL for a public company, followed by the digits, e.g. CS043840225.',
+    multiline: true,
+  },
+  {
     key: 'business.registration.tipKenya',
     label: 'Tip: Kenya',
     default:

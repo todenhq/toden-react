@@ -13,6 +13,11 @@ export const ID_TYPES: IdTypesByCountry = {
     { key: 'tax-id',          label: 'Tax ID', inputLabel: 'NIN',           digits: 11,                    requiresDocumentCapture: false },
     { key: 'nin',             label: 'NIN',                                 digits: 11,                    requiresDocumentCapture: false },
     { key: 'vnin',            label: 'Virtual NIN (vNIN)',                  digits: 16,                    requiresDocumentCapture: false },
+    // Both looked up by a Nigerian mobile number: the phone check, and the NIN
+    // record found by the number. Two IDs, each billed on its own.
+    { key: 'phone-number',    label: 'Phone Number', inputLabel: 'Phone number',                           requiresDocumentCapture: false },
+    { key: 'nin-phone',       label: 'NIN (phone number)', inputLabel: 'Phone number',                     requiresDocumentCapture: false },
+    { key: 'nin-slip',        label: 'NIN Slip',                                                           requiresDocumentCapture: true, scanSides: 'front_only'      },
     { key: 'passport',        label: 'International Passport',              pattern: /^[A-Z]\d{8}$/,       requiresDocumentCapture: true, scanSides: 'front_only'      },
     { key: 'drivers-license', label: "Driver's License",                    pattern: /^[A-Z]{3}\d{5,12}$/, requiresDocumentCapture: true, scanSides: 'front_and_back'  },
     { key: 'pvc',             label: "Permanent Voter's Card",              pattern: /^\d{19}$/,            requiresDocumentCapture: true, scanSides: 'front_and_back'  },

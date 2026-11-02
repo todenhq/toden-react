@@ -36,7 +36,11 @@ export const CUSTOMISABLE_AVAILABILITY: Record<string, TextAvailability> = {
  * to one kind of workflow, so a "(business)" suffix only adds noise.
  */
 const LABELS: Record<string, string> = {
+  'address.search.title.business': 'Search: title',
+  'address.background.title.business': 'Background checks: title',
+  'address.background.description.business': 'Background checks: description',
   'address.pin.title.business': 'Pin: title',
+  'address.entrance.description.photo.business': 'Entrance: description (photo)',
   'address.review.title.business': 'Review: title',
   'address.review.badge.business': 'Review: badge',
   'result.success.description.business': 'Success: description',

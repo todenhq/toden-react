@@ -1,5 +1,6 @@
 import type { VerificationStep, AnyIdType, AnyCountry, QuestionnaireAnswerValue, PoaDocumentType } from '../types/config';
 import type { ApiStatus, VerificationError } from '../types/verification';
+import type { AddressBookReuse, AddressBookSaveChoice } from '../lib/address-book';
 import type { ApplicantRole, BusinessDocumentKey, KeyPersonRole } from '../types/business';
 
 // ---------------------------------------------------------------------------
@@ -65,6 +66,12 @@ export interface BusinessCheckState {
   } | null;
   /** The officers on file — what makes the key-people question a confirmation. */
   keyPeople: RegistryOfficer[];
+  /**
+   * The register has not sent the shareholders yet, so `keyPeople` has no
+   * owners. The server adds them to the application when they arrive; the
+   * key-people step says so (lib/ownership-pending.ts). Absent means false.
+   */
+  ownershipPending?: boolean;
   /** Which company was checked, so a changed number re-runs it. */
   checkedNumber: string | null;
   /**
@@ -134,6 +141,16 @@ export interface KeyPersonEntry {
    * by nothing, and recorded as exactly that.
    */
   owners: KeyPersonOwnerEntry[];
+  /**
+   * The company documents that put this person in the list (mediaIds), and
+   * the row as it was when added, so removing the documents removes the
+   * person unless the applicant changed them (lib/document-people-sources.ts).
+   * Absent on rows the applicant or the register added. Never sent.
+   */
+  sourceDocuments?: string[];
+  documentSnapshot?: string;
+  /** Its documents were removed after the applicant changed it: asked to check it. */
+  documentRemoved?: boolean;
 }
 
 /** One declared owner of a corporate key person. */
@@ -147,9 +164,14 @@ export interface KeyPersonOwnerEntry {
 
 /** One uploaded slot on the business-documents step. */
 export interface BusinessDocumentUpload {
+  /** The group's first document while the server has not yet recognised it. */
   type: BusinessDocumentKey;
   mediaId: string;
   fileName: string;
+  /** The group it was uploaded for; the server recognises which document it is. */
+  group?: string;
+  /** Size in bytes, for the uploaded card (absent on a restored session). */
+  size?: number;
 }
 
 /** The KYB APPLICATION extras collected beyond the registration details. */
@@ -172,6 +194,17 @@ export interface BusinessApplicationState {
    * never a verdict; the registry lookup still says what it says.
    */
   uboUnidentifiable: boolean;
+  /**
+   * The people each uploaded company document names, by mediaId, read as the
+   * document was uploaded (POST /business/documents/people). The key-people
+   * step merges them in once each (documentPeopleApplied), so the applicant
+   * confirms them and adds their emails rather than typing them out.
+   */
+  documentPeople?: Record<string, RegistryOfficer[]>;
+  /** Documents whose people are already in `keyPeople`: never merged twice. */
+  documentPeopleApplied?: string[];
+  /** Documents still being read for their people. */
+  documentPeopleReading?: string[];
 }
 
 export interface MediaIds {
@@ -377,7 +410,19 @@ export interface VerificationState {
     deviceLng?: number;
     deviceAccuracy?: number;
     capturedAt?: string;
+    /** "Save this address to my Toden address book" (review step, unticked
+     *  by default). Rides the submission as address.book. */
+    book?: AddressBookSaveChoice;
   } | null;
+  /** A saved address picked from the person's Toden address book instead of
+   *  capturing one. Replaces `address` on the submission. Never saved to
+   *  session progress: the grant behind it is a short-lived credential. */
+  addressBookReuse: AddressBookReuse | null;
+  /** The server refused the picked saved address (spent or expired); the
+   *  offer comes back over the address step and says so. */
+  addressBookReuseRefused: boolean;
+  /** The person closed the saved address offer: it stays closed. */
+  addressBookOfferClosed: boolean;
   /** Local preview (object URL) of the uploaded entrance photo, so the review
    *  step can show it on the map. Display artefact — never serialised. */
   addressPhotoPreview: string | null;
@@ -441,6 +486,8 @@ export type VerificationAction =
   | { type: 'SET_BUSINESS_CHECK'; payload: Partial<BusinessCheckState> }
   // KYB application extras (key people / documents / applicant role+name)
   | { type: 'SET_BUSINESS_APPLICATION'; payload: Partial<BusinessApplicationState> }
+  | { type: 'DOCUMENT_PEOPLE_READING'; payload: { mediaId: string } }
+  | { type: 'DOCUMENT_PEOPLE_READ'; payload: { mediaId: string; people: RegistryOfficer[] | null } }
   | { type: 'SET_SUPPORTING_DOCUMENTS'; payload: VerificationState['supportingDocuments'] }
   // Document capture
   | { type: 'SET_DOCUMENT_FRONT'; payload: string }
@@ -474,6 +521,11 @@ export type VerificationAction =
   | { type: 'SET_ADDRESS_PHOTO_PREVIEW'; payload: string | null }
   | { type: 'SET_ADDRESS_INTRO_SEEN' }
   | { type: 'SET_ADDRESS_SANDBOX_OUTCOME'; payload: VerificationState['addressSandboxOutcome'] }
+  | { type: 'SET_ADDRESS_BOOK_SAVE'; payload: AddressBookSaveChoice }
+  | { type: 'SET_ADDRESS_BOOK_REUSE'; payload: AddressBookReuse | null }
+  | { type: 'ADDRESS_BOOK_REUSE_REFUSED' }
+  | { type: 'CLOSE_ADDRESS_BOOK_OFFER' }
+  | { type: 'REOPEN_ADDRESS_BOOK_OFFER' }
   | { type: 'CLEAR_ADDRESS' }
   // Submission
   | { type: 'SUBMIT_VERIFICATION' }

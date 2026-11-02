@@ -81,6 +81,29 @@ export const RESULT_SUBMIT_TEXTS: TextEntry[] = [
     multiline: true,
     configPath: SUCCESS_DESCRIPTION,
   },
+  // A scoped business workflow's success line names the business. They take
+  // the same older success.description field as every other variant.
+  {
+    key: 'result.success.description.address.business',
+    label: 'Success: description (business address check)',
+    default: "Your business address verification has been submitted. You'll be notified of the result.",
+    multiline: true,
+    configPath: SUCCESS_DESCRIPTION,
+  },
+  {
+    key: 'result.success.description.questionnaire.business',
+    label: 'Success: description (business questionnaire)',
+    default: "Your answers about your business have been submitted. You'll be notified of the result.",
+    multiline: true,
+    configPath: SUCCESS_DESCRIPTION,
+  },
+  {
+    key: 'result.success.description.contact.business',
+    label: 'Success: description (business contact check)',
+    default: "Your business contact verification has been submitted. You'll be notified of the result.",
+    multiline: true,
+    configPath: SUCCESS_DESCRIPTION,
+  },
   {
     key: 'result.success.redirectLabel',
     label: 'Success: redirect button',

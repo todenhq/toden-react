@@ -1,6 +1,6 @@
 {
-  "name": "@myazahq/kyc-sdk-react",
-  "version": "3.8.0",
+  "name": "@toden/react",
+  "version": "4.0.0",
   "description": "Toden SDK for React: drop-in identity verification with ID capture, document scan and active liveness detection",
   "license": "MIT",
   "author": "Flitstack Technologies Inc.",
@@ -22,11 +22,11 @@
   ],
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/todenhq/kyc-sdk-react.git"
+    "url": "git+https://github.com/todenhq/toden-react.git"
   },
-  "homepage": "https://github.com/todenhq/kyc-sdk-react#readme",
+  "homepage": "https://github.com/todenhq/toden-react#readme",
   "bugs": {
-    "url": "https://github.com/todenhq/kyc-sdk-react/issues"
+    "url": "https://github.com/todenhq/toden-react/issues"
   },
   "main": "./dist/index.js",
   "module": "./dist/index.mjs",

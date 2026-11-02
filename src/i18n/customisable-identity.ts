@@ -5,7 +5,6 @@ import {
   DOCUMENT,
   EVERYWHERE,
   FULL_IDENTITY,
-  IDENTITY,
   LIVENESS,
   BUSINESS,
   all,
@@ -26,7 +25,9 @@ export const IDENTITY_TEXTS: Record<string, TextAvailability> = {
     ],
     FULL_IDENTITY,
   ),
-  ...all(['welcome.process.proofOfAddress'], { ...IDENTITY, scopes: ['full', 'address'] }),
+  // A person's full flow or an address check, a business's address check
+  // included (its own wording inherits these, i18n/business-variants.ts).
+  ...all(['welcome.process.proofOfAddress'], { scopes: ['full', 'address'], step: 'proofOfAddress' }),
   ...all(['welcome.process.addressMap'], { scopes: ['full'], step: 'address' }),
   ...all(['welcome.process.addressPin', 'welcome.process.addressDetails'], { scopes: ['address'] }),
   ...all(['welcome.process.faceSelfie', 'welcome.process.faceMatch'], { scopes: ['biometric-authentication'] }),
@@ -169,7 +170,7 @@ export const IDENTITY_TEXTS: Record<string, TextAvailability> = {
       'proofOfAddress.kind.other',
       'proofOfAddress.uploaded',
     ],
-    { ...IDENTITY, scopes: ['full', 'address'], step: 'proofOfAddress' },
+    { scopes: ['full', 'address'], step: 'proofOfAddress' },
   ),
 
   ...all(

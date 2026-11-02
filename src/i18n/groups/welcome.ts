@@ -20,6 +20,12 @@ export const WELCOME_TEXTS: TextGroup = {
     { key: 'welcome.title.faceEnrolment', label: 'Title: face enrolment', default: 'Face Enrolment' },
     { key: 'welcome.title.questionnaire', label: 'Title: questions', default: 'A Few Questions' },
     { key: 'welcome.title.contact', label: 'Title: contact details', default: 'Confirm Your Contact Details' },
+    // A SCOPED workflow about a business: the scope's own screens, worded for
+    // the company (lib/scope.ts isScopedBusiness). Never customisable on their
+    // own; i18n/business-variants.ts lets an org's words for the base apply.
+    { key: 'welcome.title.address.business', label: 'Title: business address check', default: 'Business Address Verification' },
+    { key: 'welcome.title.questionnaire.business', label: 'Title: business questions', default: 'A Few Questions About Your Business' },
+    { key: 'welcome.title.contact.business', label: 'Title: business contact details', default: 'Confirm Your Business Contact Details' },
     {
       key: 'welcome.description',
       label: 'Description',
@@ -67,6 +73,27 @@ export const WELCOME_TEXTS: TextGroup = {
       label: 'Description: contact details',
       default:
         'We need to re-confirm the email address and phone number on your account. This takes a minute and is secure.',
+      multiline: true,
+    },
+    {
+      key: 'welcome.description.address.business',
+      label: 'Description: business address check',
+      default:
+        'We need to confirm where your business operates to comply with regulatory requirements. This process is quick and secure.',
+      multiline: true,
+    },
+    {
+      key: 'welcome.description.questionnaire.business',
+      label: 'Description: business questions',
+      default:
+        'A few questions keep your business details up to date and help us comply with regulatory requirements.',
+      multiline: true,
+    },
+    {
+      key: 'welcome.description.contact.business',
+      label: 'Description: business contact details',
+      default:
+        "We need to re-confirm your business's email address and phone number. This takes a minute and is secure.",
       multiline: true,
     },
     ...WELCOME_PROCESS_TEXTS,

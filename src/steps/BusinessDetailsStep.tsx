@@ -1,13 +1,15 @@
 'use client';
 
 import React from 'react';
-import { Building2, Loader2, Pencil } from '../components/icons';
+import { Building2, Info, Loader2, Pencil } from '../components/icons';
 import { StepHeader } from '../components/StepHeader';
 import { Button } from '../components/ui/button';
-import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
 import { BusinessCountrySelect } from '../components/BusinessCountrySelect';
 import { BusinessSearch } from '../components/BusinessSearch';
+import { BusinessRegionField, useBusinessRegions } from '../components/BusinessRegionField';
+import { businessPickView, nameSearchOffered, pickedBusinessName } from '../lib/business-search';
+import { BusinessNumberFields } from '../components/BusinessNumberFields';
 import { isValidWebsite } from '../lib/website';
 import { CountryFlag } from '../components/CountryFlag';
 import { BusinessProductPicker } from '../components/BusinessProductPicker';
@@ -73,6 +75,14 @@ export function BusinessDetailsStep() {
   // would invite somebody to fill in answers we are about to overwrite.
   //
   // Continue is what runs the check and moves between them.
+  //
+  // With no search by name (switched off, or refused for this attempt: no
+  // session, the org cannot pay, too many searches) the first screen asks for
+  // the registration number instead, and Continue still checks the register and
+  // fills the second screen. Never "no matches", which reads as "not registered".
+  const [searchRefused, setSearchRefused] = React.useState<string | null>(null);
+  const [manualEntry, setManualEntry] = React.useState(false);
+  const searchOn = nameSearchOffered(business) && searchRefused === null;
   const [phase, setPhase] = React.useState<'pick' | 'details'>('pick');
   // Seed once, and only into empty fields: a resumed session already carries
   // what the applicant typed, and overwriting that with the org's older guess
@@ -122,6 +132,16 @@ export function BusinessDetailsStep() {
    */
   const picked = registrationNumber.trim() !== '';
   const nameRequired = business?.requireRegistrationName === true;
+  // Read on every render, so a preview whose switch changes while this step
+  // is on screen moves between the search and the number box at once.
+  const view = businessPickView({
+    searchOffered: nameSearchOffered(business),
+    refused: searchRefused !== null,
+    manualEntry,
+    picked,
+  });
+  // The search carries the region picker; number entry has to ask itself.
+  const regions = useBusinessRegions(view.numberEntry ? country : '');
 
   // Key-people email invites: optional, but format-validated when typed.
   const showContactEmail = keyPeopleNeedsContactEmail(business);
@@ -154,7 +174,11 @@ export function BusinessDetailsStep() {
   // a malformed one is not, and it should stop Continue rather than only
   // colouring the box red.
   const websiteValid = isValidWebsite(state.business.website);
-  const pickValid = !!product && numberValid && (!nameRequired || registrationName.trim() !== '');
+  // A register asked one region at a time needs the region before a number
+  // means anything (only asked here when the search is not carrying it).
+  const regionOk = regions.length === 0 || !!state.business.subdivisionCode;
+  const pickValid =
+    !!product && numberValid && regionOk && (!nameRequired || registrationName.trim() !== '');
   const isFormValid =
     phase === 'pick'
       ? pickValid
@@ -287,6 +311,22 @@ export function BusinessDetailsStep() {
     }
   };
 
+  const numberFields = (showName: boolean) => (
+    <BusinessNumberFields
+      isTin={isTin}
+      number={registrationNumber}
+      numberValid={numberValid}
+      formatError={!formatOk ? regHint.formatError : null}
+      tip={regHint.tip}
+      placeholder={regHint.placeholder}
+      name={registrationName}
+      showName={showName}
+      nameRequired={nameRequired}
+      onNumber={(value) => setDetails({ registrationNumber: value })}
+      onName={(value) => setDetails({ registrationName: value })}
+    />
+  );
+
   return (
     <div className="space-y-6 animate-slide-up">
       <StepHeader
@@ -336,22 +376,28 @@ export function BusinessDetailsStep() {
           somebody back to an empty box and made them search again for the list
           they were just looking at. Hiding keeps the whole picker alive, which
           is what makes Change cheap. */}
-      <div className={phase === 'pick' && country && !picked ? '' : 'hidden'}>
+      {searchOn && (
+      <div className={phase === 'pick' && country && view.search ? '' : 'hidden'}>
         <BusinessSearch
           country={country}
+          sessionId={state.sessionId}
+          onRefused={(message) => {
+            setSearchRefused(message ?? t('business.search.refused'));
+          }}
           onPicked={(hit) =>
             // Names the company and nothing more: the register is asked on
             // Continue, and the fields it fills live on the screen after.
-            setDetails({ registrationNumber: hit.registrationNumber, registrationName: hit.name })
+            setDetails({ registrationNumber: hit.registrationNumber, registrationName: pickedBusinessName(hit.name) })
           }
           // No company to look up, so there is nothing to check first.
           region={state.business.subdivisionCode ?? ''}
           onRegion={(subdivisionCode) => setDetails({ subdivisionCode })}
-          onManualEntry={() => setPhase('details')}
+          onManualEntry={() => setManualEntry(true)}
         />
       </div>
+      )}
 
-      {phase === 'pick' && picked && (
+      {phase === 'pick' && view.card && (
         <div className="space-y-2">
           <Label>{t('business.details.pickedLabel')}</Label>
           <div className="flex items-center gap-3 rounded-xl border border-primary bg-primary/5 p-3">
@@ -384,41 +430,36 @@ export function BusinessDetailsStep() {
         </div>
       )}
 
-      <div className={phase === 'details' ? 'space-y-4' : 'hidden'}>
-        <div className="space-y-2">
-          <Label htmlFor="registrationNumber">
-            {t(isTin ? 'business.details.tinLabel' : 'business.details.registrationNumberLabel')}
-          </Label>
-          <Input
-            id="registrationNumber"
-            placeholder={regHint.placeholder}
-            value={registrationNumber}
-            onChange={(e) => setDetails({ registrationNumber: e.target.value })}
-            className={registrationNumber && !numberValid ? 'border-destructive' : ''}
-          />
-          {registrationNumber !== '' && !numberValid ? (
-            <p className="text-sm text-destructive">
-              {!formatOk && regHint.formatError
-                ? regHint.formatError
-                : t(isTin ? 'business.details.invalidTin' : 'business.details.invalidRegistrationNumber')}
+      {/* No search: the number is the whole first screen. The name is asked
+          here only when the workflow requires it; the register supplies it on
+          Continue otherwise. */}
+      {phase === 'pick' && view.numberEntry && (
+        <div className="space-y-4">
+          {searchRefused && (
+            <p role="status" className="flex items-start gap-2 text-sm text-muted-foreground">
+              <Info className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
+              {searchRefused}
             </p>
-          ) : (
-            regHint.tip && <p className="text-xs text-muted-foreground">{regHint.tip}</p>
           )}
-        </div>
-
-        <div className="space-y-2">
-          <Label htmlFor="registrationName">
-            {t('business.details.nameLabel')}
-            {!nameRequired && <span className="text-muted-foreground"> {t('business.optional')}</span>}
-          </Label>
-          <Input
-            id="registrationName"
-            placeholder={t('business.details.namePlaceholder')}
-            value={registrationName}
-            onChange={(e) => setDetails({ registrationName: e.target.value })}
+          <BusinessRegionField
+            country={country}
+            regions={regions}
+            region={state.business.subdivisionCode ?? ''}
+            onRegion={(subdivisionCode) => setDetails({ subdivisionCode })}
           />
+          {numberFields(nameRequired)}
         </div>
+      )}
+
+      <div className={phase === 'details' ? 'space-y-4' : 'hidden'}>
+        <BusinessRegionField
+          country={country}
+          regions={regions}
+          region={state.business.subdivisionCode ?? ''}
+          onRegion={(subdivisionCode) => setDetails({ subdivisionCode })}
+        />
+
+        {numberFields(true)}
 
         {showCompanyInfo && (
           <BusinessCompanyInfoFields

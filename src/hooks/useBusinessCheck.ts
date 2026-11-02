@@ -14,6 +14,7 @@ import { useCallback } from 'react';
 import type { BusinessCheckState } from '../context/types';
 import { useVerificationContext } from '../context/VerificationContext';
 import { useVerificationConfig } from '../context/VerificationConfigContext';
+import { selectOwnershipPending } from '../lib/ownership-pending';
 
 export interface BusinessCheckResult {
   /** Whether the flow may continue. Only a register outage stops it. */
@@ -45,7 +46,7 @@ export function useBusinessCheck(): {
   const reset = useCallback(() => {
     dispatch({
       type: 'SET_BUSINESS_CHECK',
-      payload: { status: 'idle', company: null, keyPeople: [], checkedNumber: null, prefilled: [] },
+      payload: { status: 'idle', company: null, keyPeople: [], checkedNumber: null, prefilled: [], ownershipPending: false },
     });
   }, [dispatch]);
 
@@ -81,7 +82,7 @@ export function useBusinessCheck(): {
       // against. The check happens at submission, exactly as it did before.
       if (!state.sessionId) return { canContinue: true, company: null };
 
-      dispatch({ type: 'SET_BUSINESS_CHECK', payload: { status: 'checking', checkedNumber: normalized } });
+      dispatch({ type: 'SET_BUSINESS_CHECK', payload: { status: 'checking', checkedNumber: normalized, ownershipPending: false } });
 
       try {
         const res = await config.api.businessSelect({
@@ -137,7 +138,14 @@ export function useBusinessCheck(): {
         };
         dispatch({
           type: 'SET_BUSINESS_CHECK',
-          payload: { status: 'found', company, keyPeople: b.keyPeople ?? [] },
+          payload: {
+            status: 'found',
+            company,
+            keyPeople: b.keyPeople ?? [],
+            // The register is still sending the shareholders: the prefill
+            // has no owners yet, and the key-people step says so.
+            ownershipPending: selectOwnershipPending(b),
+          },
         });
         return { canContinue: true, company };
       } catch {

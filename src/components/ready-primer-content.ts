@@ -1,4 +1,4 @@
-import { BellRing, Glasses, IdCard, LocateFixed, MapPin, MapPinned, ScanFace, ScanLine, Sparkles, Sun, Timer, UserRound } from './icons';
+import { BellRing, FlashOff, Glasses, IdCard, LocateFixed, MapPin, MapPinned, ScanFace, ScanLine, Sun, Timer, UserRound } from './icons';
 import type { ReadyPrimerProps } from './ReadyPrimer';
 
 /**
@@ -39,7 +39,7 @@ export const READY_LIVENESS: ReadyContent = {
     { icon: UserRound, label: 'Put your face in the circle' },
     { icon: Glasses, label: 'Take off glasses or anything covering your face' },
     { icon: Sun, label: 'Choose a bright spot, with the light in front of you' },
-    { icon: Sparkles, label: 'Keep glare and shiny reflections off your face' },
+    { icon: FlashOff, label: 'Keep glare and shiny reflections off your face' },
   ],
   textKeys: {
     title: 'primer.selfie.title',

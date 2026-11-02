@@ -6,7 +6,7 @@ import { describe } from 'vitest';
 //
 // A few suites read a SIBLING package: the shared vector files under
 // sdk-flutter/test, one rule written down as data for all three SDKs. The
-// public repo (todenhq/kyc-sdk-react) carries this package alone, so those
+// public repo (todenhq/toden-react) carries this package alone, so those
 // files do not exist there and such a suite fails with ENOENT rather than
 // running (the React Native and Flutter mirrors refused their 2026-09-08
 // releases exactly that way). Outside the monorepo the cross-package suites

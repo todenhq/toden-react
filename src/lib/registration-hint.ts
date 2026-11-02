@@ -78,12 +78,16 @@ export function registrationNumberHint(
 }
 
 const COUNTRY_EXAMPLES: Record<string, string> = {
+  // Ghana's Office of the Registrar of Companies: CS (company), BN (business
+  // name), PL (public company).
+  GH: 'CS043840225',
   KE: 'PVT-JZUA6Z663',
   ZA: '201133333323',
 };
 
 /** Text keys of the registry-confirmed per-country tips. */
 const COUNTRY_TIPS: Record<string, string> = {
+  GH: 'business.registration.tipGhana',
   KE: 'business.registration.tipKenya',
   ZA: 'business.registration.tipSouthAfrica',
 };

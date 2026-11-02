@@ -3,13 +3,14 @@
 import { useEffect, useState } from 'react';
 import { useVerificationConfig } from '../../context/VerificationConfigContext';
 import { useVerificationContext } from '../../context/VerificationContext';
-import { configScope } from '../../lib/scope';
+import { configScope, isScopedBusiness } from '../../lib/scope';
 import { isBusinessFlow } from '../../lib/business';
 import { defaultMapView } from '../../lib/map-tiles';
 import { addressBackStep, addressNextStep } from '../../lib/address-step-nav';
 import { verifiedIdsFromState } from '../../lib/supporting-documents';
 import { deviceFixFields, uploadAddressPhoto } from '../address-helpers';
 import { addressFlowOptions, addressFlowSteps, addressVendorsStubbed, nextAddressStep, prevAddressStep } from './flow-steps';
+import { addressBookOffer } from '../../lib/address-book';
 import { usePinActions } from './use-pin-actions';
 import { geoDefaultCountry } from './country-adoption';
 import type { VerificationStep } from '../../types/config';
@@ -30,27 +31,32 @@ export function useAddressFlow() {
   const [confirming, setConfirming] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const isBusiness = isBusinessFlow(config);
+  // The KYB application's premises step (its country is the register's) vs
+  // the wording: a scoped business address check reads "the premises" too,
+  // but runs the address scope's own steps and declared country.
+  const kybPremises = isBusinessFlow(config);
+  const isBusiness = kybPremises || isScopedBusiness(config);
   const pin = state.address ? { lat: state.address.lat, lng: state.address.lng } : null;
   const googleKey = config.serverConfig?.googleMapsBrowserKey ?? null;
   const mapsFrameUrl = config.serverConfig?.mapsFrameUrl ?? null;
-  // KYB: the single premises step — its pin + directions ARE the capture, so
-  // the flow options collapse to none of the optional steps.
-  const flow = isBusiness
-    ? { searchAvailable: false, photoMode: 'off' as const, streetViewOffered: false }
-    : addressFlowOptions({
-        photo: address?.photo,
-        streetView: address?.streetView,
-        serverSearch: Boolean(config.serverConfig?.addressSearch),
-        previewMode: addressVendorsStubbed({
-          previewMode: config.previewMode,
-          environment: config.serverConfig?.environment,
-        }),
-        hasGoogleKey: Boolean(googleKey),
-        hasStreetViewFrame: Boolean(mapsFrameUrl),
-      });
+  // A KYB premises runs the same steps as a person's address (search, pin,
+  // entrance, review) since 2026-10-18: the entrance photo and Street View
+  // frame are part of how a business premises is checked.
+  const flow = addressFlowOptions({
+    photo: address?.photo,
+    streetView: address?.streetView,
+    serverSearch: Boolean(config.serverConfig?.addressSearch),
+    previewMode: addressVendorsStubbed({
+      previewMode: config.previewMode,
+      environment: config.serverConfig?.environment,
+    }),
+    hasGoogleKey: Boolean(googleKey),
+    hasStreetViewFrame: Boolean(mapsFrameUrl),
+  });
   const { photoMode, streetViewOffered, searchAvailable } = flow;
-  const steps = isBusiness ? (['address-collection'] as VerificationStep[]) : addressFlowSteps(flow);
+  const steps = addressFlowSteps(flow);
+  // The first step that captures the address (the presence primer's home).
+  const firstCaptureStep = steps[0]!;
 
   // ADDRESS SCOPE: NO seeded country, ever (user decision 2026-09-03). The
   // flow's country exists only once EVIDENCE supplies it — the IP geo
@@ -60,7 +66,7 @@ export function useAddressFlow() {
   // survives only as the wire-level fallback at submit (the verify schema
   // requires an ISO-2), for the case where no geocode ever answered.
   const isAddressScope = configScope(config) === 'address';
-  const country = isBusiness
+  const country = kybPremises
     ? (state.business.country ?? undefined)
     : isAddressScope
       ? (state.selectedCountry ?? undefined)
@@ -174,6 +180,8 @@ export function useAddressFlow() {
     mapsFrameUrl,
     streetViewOffered,
     steps,
+    firstCaptureStep,
+    bookOffer: addressBookOffer(config),
     uploading,
     confirming,
     error,

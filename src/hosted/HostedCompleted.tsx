@@ -6,6 +6,7 @@ import { VerificationConfigProvider, type ServerSdkConfig } from '../context/Ver
 import { VerificationModal } from '../components/VerificationModal';
 import type { AddressCollectionConfig, AnyCountry, VerificationAppearance, VerificationSuccessContent } from '../types/config';
 import type { CompletedSessionSummary, VerificationApi } from '../services/api';
+import { stillWaiting } from './completed-polling';
 
 // The hosted page for a session that is ALREADY submitted.
 //
@@ -21,14 +22,6 @@ import type { CompletedSessionSummary, VerificationApi } from '../services/api';
 
 /** How often the statuses are re-read while anybody still owes a check. */
 const POLL_MS = 20_000;
-
-function stillWaiting(summary: CompletedSessionSummary): boolean {
-  // A decided application has nothing left to converge on, and its invites have
-  // been voided, so there is no list to keep fresh either.
-  const outcome = summary.outcome ?? 'submitted';
-  if (summary.cancelled === true || outcome === 'declined' || outcome === 'error') return false;
-  return summary.keyPeople.some((p) => p.status === 'pending' || p.status === 'failed');
-}
 
 /**
  * Keep the reducer's own open flag in step with the modal, which is rendered

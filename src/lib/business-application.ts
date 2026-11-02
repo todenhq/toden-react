@@ -12,6 +12,7 @@ import type {
   KeyPersonRole,
   WorkflowBusinessConfig,
 } from '../types/business';
+import { rowMissingStake } from './key-person-stake';
 import type { VerificationStep, QuestionnaireConfig, AddressCollectionConfig } from '../types/config';
 import type { KeyPersonEntry } from '../context/types';
 import { hasActiveQuestionnaire } from './questionnaire';
@@ -55,6 +56,8 @@ export interface ResolvedBusinessDocumentType {
   key: BusinessDocumentKey;
   label: string;
   required: boolean;
+  /** How recent it must be, in months; null = any date. */
+  maxAgeMonths: number | null;
 }
 
 /**
@@ -73,6 +76,7 @@ export function resolveBusinessDocumentTypes(
         key: 'incorporation_certificate',
         label: businessDocumentLabel('incorporation_certificate', t),
         required: true,
+        maxAgeMonths: null,
       },
     ];
   }
@@ -80,6 +84,7 @@ export function resolveBusinessDocumentTypes(
     key: type.key,
     label: type.label ?? businessDocumentLabel(type.key, t),
     required: type.required === true,
+    maxAgeMonths: typeof type.maxAgeMonths === 'number' ? type.maxAgeMonths : null,
   }));
 }
 
@@ -191,7 +196,9 @@ export function prevBusinessStep(
     config.addressCollection?.enabled === true,
   );
   const idx = order.indexOf(current);
-  return idx > 0 ? order[idx - 1]! : 'consent';
+  const prev = idx > 0 ? order[idx - 1]! : 'consent';
+  // Backing into the premises address lands on its last step, the review.
+  return prev === 'address-collection' ? 'address-review' : prev;
 }
 
 // ---------------------------------------------------------------------------
@@ -232,9 +239,10 @@ export function isKeyPersonRowBlank(row: KeyPersonEntry): boolean {
 export function invalidKeyPersonRows(
   rows: KeyPersonEntry[],
   emailRequiredFor: ReadonlySet<KeyPersonRole> = new Set(),
+  stakeRequired = false,
 ): number[] {
   return rows
-    .map((row, i) => (!isKeyPersonRowBlank(row) && !isKeyPersonRowValid(row, emailRequiredFor) ? i : -1))
+    .map((row, i) => (!isKeyPersonRowBlank(row) && !isKeyPersonRowValid(row, emailRequiredFor, stakeRequired) ? i : -1))
     .filter((i) => i >= 0);
 }
 
@@ -249,7 +257,8 @@ export function rowNeedsEmail(
 }
 
 /**
- * Row validity: name >=2 chars + known role; email/ownership validated when typed.
+ * Row validity: name >=2 chars + known role; email/ownership validated when typed;
+ * with `stakeRequired`, an owner must give a percentage.
  *
  * `requireEmail` makes the address mandatory rather than merely well-formed.
  * The server enforces it too, but only at SUBMIT - several steps later, as a
@@ -259,6 +268,7 @@ export function rowNeedsEmail(
 export function isKeyPersonRowValid(
   row: KeyPersonEntry,
   emailRequiredFor: ReadonlySet<KeyPersonRole> = new Set(),
+  stakeRequired = false,
 ): boolean {
   if (row.name.trim().length < 2) return false;
   const roles = row.roles && row.roles.length > 0 ? row.roles : [row.role];
@@ -267,6 +277,8 @@ export function isKeyPersonRowValid(
   // one would block a disclosure the applicant is right to make.
   if (rowNeedsEmail(row, emailRequiredFor) && row.email.trim() === '') return false;
   if (row.email.trim() !== '' && !isValidContactEmail(row.email.trim())) return false;
+  // Who is a beneficial owner is decided from the stake (key-person-stake.ts).
+  if (rowMissingStake(row, stakeRequired)) return false;
   if (row.ownershipPct.trim() !== '') {
     const pct = Number(row.ownershipPct);
     if (!Number.isFinite(pct) || pct < 0 || pct > 100) return false;

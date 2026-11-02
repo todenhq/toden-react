@@ -40,6 +40,7 @@ export const UPLOAD_DOCUMENT_REVIEW_ENTRIES: TextEntry[] = [
   { key: 'uploadDocument.frontPreview.nextUploadBack', label: 'Front preview: next (upload)', default: 'Next: Upload Back' },
   { key: 'uploadDocument.frontPreview.continueToReview', label: 'Front preview: continue to review', default: 'Continue to Review' },
   { key: 'uploadDocument.flipBanner', label: 'Flip the card banner', default: 'Great! Now flip your card over to scan the back.' },
+  { key: 'uploadDocument.flipDone', label: 'Flip the card: done', default: "I've turned it over" },
 
   // Review.
   { key: 'uploadDocument.review.photoCaptured', label: 'Review: photo captured', default: 'Photo captured' },

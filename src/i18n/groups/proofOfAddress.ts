@@ -20,6 +20,21 @@ export const PROOF_OF_ADDRESS_TEXTS: TextGroup = {
       placeholders: ['days'],
       multiline: true,
     },
+    {
+      key: 'proofOfAddress.description.business',
+      label: 'Description (business)',
+      default:
+        "Upload a document that shows your business's name and address, issued within the last {days} days.",
+      placeholders: ['days'],
+      multiline: true,
+    },
+    {
+      key: 'proofOfAddress.description.noName.business',
+      label: 'Description (business, name not needed)',
+      default: "Upload a document that shows your business's address, issued within the last {days} days.",
+      placeholders: ['days'],
+      multiline: true,
+    },
     { key: 'proofOfAddress.country.label', label: 'Country label', default: 'Country' },
     { key: 'proofOfAddress.country.placeholder', label: 'Country placeholder', default: 'Select country' },
     { key: 'proofOfAddress.country.search', label: 'Country search placeholder', default: 'Search countries…' },

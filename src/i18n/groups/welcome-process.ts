@@ -22,6 +22,16 @@ export const WELCOME_PROCESS_TEXTS: TextEntry[] = [
     default: 'Confirm the details only you can know',
   },
   {
+    key: 'welcome.process.addressPin.business',
+    label: 'Step: pin business premises',
+    default: 'Pin your business premises on a map',
+  },
+  {
+    key: 'welcome.process.addressDetails.business',
+    label: 'Step: premises details',
+    default: 'Add the details that help us find the premises',
+  },
+  {
     key: 'welcome.process.faceSelfie',
     label: 'Step: face check selfie',
     default: 'Take a quick selfie with liveness checks',
@@ -36,6 +46,11 @@ export const WELCOME_PROCESS_TEXTS: TextEntry[] = [
     key: 'welcome.process.contactScope',
     label: 'Step: confirm contact details',
     default: 'Confirm your contact details with a one-time code',
+  },
+  {
+    key: 'welcome.process.contactScope.business',
+    label: 'Step: confirm business contact details',
+    default: "Confirm your business's contact details with a one-time code",
   },
   {
     key: 'welcome.process.contactEmailAndPhone',
@@ -65,8 +80,18 @@ export const WELCOME_PROCESS_TEXTS: TextEntry[] = [
     label: 'Step: proof of address',
     default: 'Upload a proof of address document',
   },
+  {
+    key: 'welcome.process.proofOfAddress.business',
+    label: 'Step: proof of business address',
+    default: "Upload a document showing your business's address",
+  },
   { key: 'welcome.process.addressMap', label: 'Step: pin address', default: 'Pin your address on a map' },
   { key: 'welcome.process.questions', label: 'Step: questions', default: 'Answer a few short questions' },
+  {
+    key: 'welcome.process.questions.business',
+    label: 'Step: questions about the business',
+    default: 'Answer a few short questions about your business',
+  },
   {
     key: 'welcome.process.keyPeople',
     label: 'Step: directors and owners',

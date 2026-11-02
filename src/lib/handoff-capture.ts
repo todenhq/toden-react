@@ -30,6 +30,13 @@ export interface HandoffCaptureConfig {
 }
 
 export function handoffCaptureNeeded(config: HandoffCaptureConfig): boolean {
+  // A scope decides first, whoever the workflow is about: a scoped business
+  // workflow runs its scope's own steps, never the KYB application below.
+  if (config.scope && config.subjectType === 'business') {
+    // Never the camera: a business has no face, and a biometric scope on a
+    // business is a configuration the flow refuses (lib/scope.ts).
+    return config.scope === 'address' && config.addressCollection?.enabled === true;
+  }
   // KYB: the applicant's own in-flow KYC, or company documents to photograph.
   // A bare registry lookup is all typed and gains nothing from a phone.
   if (config.subjectType === 'business') {

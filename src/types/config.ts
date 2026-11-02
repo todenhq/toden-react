@@ -24,7 +24,7 @@ export type SupportedCountry = 'NG' | 'GH' | 'KE' | 'ZA' | 'CI';
  */
 export type AnyCountry = SupportedCountry | (string & {});
 
-export type NigeriaIdType = 'bvn' | 'bvn-premium' | 'nin' | 'vnin' | 'tax-id' | 'passport' | 'drivers-license' | 'pvc';
+export type NigeriaIdType = 'bvn' | 'bvn-premium' | 'nin' | 'vnin' | 'tax-id' | 'phone-number' | 'nin-phone' | 'nin-slip' | 'passport' | 'drivers-license' | 'pvc';
 export type GhanaIdType = 'ghana-card' | 'voters' | 'drivers-license' | 'ssnit' | 'passport';
 export type KenyaIdType = 'national-id' | 'passport';
 export type SouthAfricaIdType = 'national-id';
@@ -109,6 +109,9 @@ export type VerificationStep =
   // 'address-collection' is the PIN step and keeps the original wire name for
   // session-progress and step-log compatibility; search/entrance/review exist
   // only on individual flows (KYB keeps the single premises step).
+  // Picking a saved address from the person's Toden address book (offered
+  // only when the organisation has address book reuse on).
+  | 'address-book'
   | 'address-search'
   | 'address-collection'
   | 'address-entrance'
@@ -714,6 +717,26 @@ export interface VerificationConfig<C extends AnyCountry = AnyCountry> {
    */
   allowDocumentScan?: boolean;
 
+  /**
+   * Show the review screen, with Retake and Continue, after a document scan.
+   * Default `true`. When `false`, a scan moves straight on. Uploaded photos
+   * always get it, and so does a scan with a problem to fix.
+   */
+  documentReview?: boolean;
+
+  /**
+   * Record sound on the document capture video. Default `false`. If the microphone is refused or unavailable the clip
+   * records without sound and the flow continues. In an iframe, allow it with
+   * `allow="camera; microphone"`.
+   */
+  documentAudio?: boolean;
+
+  /**
+   * Record sound on the liveness recording, on the same terms as
+   * `documentAudio`. Default `false`.
+   */
+  livenessAudio?: boolean;
+
   /** Enable liveness detection during selfie capture (default: true) */
   enableLiveness?: boolean;
 
@@ -990,7 +1013,7 @@ export interface VerificationConfig<C extends AnyCountry = AnyCountry> {
    * - Set to an **absolute URL** (e.g. `'https://cdn.example.com/kyc-assets'`)
    *   to serve from a CDN — requires no files in your `public/` folder.
    * - Set to a **relative path** (e.g. `'/kyc-assets'`) to serve locally; copy
-   *   the `gifs/` folder from `node_modules/@myazahq/kyc-sdk-react/gifs/` to
+   *   the `gifs/` folder from `node_modules/@toden/react/gifs/` to
    *   that path in your public directory.
    *
    * Defaults to `'/kyc-assets'`.
@@ -1003,7 +1026,7 @@ export interface VerificationConfig<C extends AnyCountry = AnyCountry> {
    * restyle the SDK and the SDK's styles cannot leak into your app — no
    * global `styles.css` import needed. Set `false` to mount in the light DOM
    * instead (the pre-2.x behaviour), which requires importing
-   * `@myazahq/kyc-sdk-react/styles.css` globally yourself.
+   * `@toden/react/styles.css` globally yourself.
    */
   styleIsolation?: boolean;
 

@@ -8,6 +8,7 @@
 
 import { withRetry } from '../lib/retry';
 import { businessProductsForCountry } from '../lib/business';
+import { businessDocumentsPayload } from '../lib/business-document-groups';
 import {
   hasApplicantVerification,
   hasBusinessDocumentsStep,
@@ -22,6 +23,7 @@ import {
   silentCaptureForSubmit,
   withSilentCaptureMetadata,
 } from './submit-helpers';
+import { addressSubmission } from './address-submission';
 import { settleLivenessVideo } from '../lib/integrity-signals';
 import type { VerificationConfigValue } from '../context/VerificationConfigContext';
 import type { VerificationState } from '../context/types';
@@ -75,7 +77,7 @@ export async function submitBusinessApplication({
   // configures them — the server ignores unconfigured fields anyway.
   const documents =
     hasBusinessDocumentsStep(business) && app.documents.length > 0
-      ? app.documents.map((d) => ({ type: d.type, mediaId: d.mediaId }))
+      ? businessDocumentsPayload(app.documents)
       : undefined;
   const keyPeople = hasKeyPeopleCollection(business)
     ? keyPeoplePayload(app.keyPeople, app.applicantKeyPersonIndex)
@@ -114,6 +116,14 @@ export async function submitBusinessApplication({
         },
         ...(config.workflowId ? { workflowId: config.workflowId } : {}),
         ...(config.userId ? { userId: config.userId } : {}),
+        // The business premises (Address Intelligence): the pin and, beside
+        // it, the entrance photo. The server checks the pin against the
+        // register, the company's proof-of-address document and a public
+        // listing, and drops the block when the workflow's step is off.
+        ...addressSubmission(config.addressCollection, state.address),
+        ...(state.address && state.mediaIds.addressPhoto
+          ? { mediaIds: { addressPhoto: state.mediaIds.addressPhoto } }
+          : {}),
         ...(Object.keys(state.questionnaireAnswers).length > 0
           ? { questionnaire: state.questionnaireAnswers }
           : {}),
