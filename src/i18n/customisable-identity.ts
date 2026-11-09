@@ -17,7 +17,6 @@ export const IDENTITY_TEXTS: Record<string, TextAvailability> = {
   ...all(
     [
       'welcome.process.verifyId',
-      'welcome.process.personalInfo',
       'welcome.process.captureDocument',
       'welcome.process.uploadDocument',
       'welcome.process.selfie',
@@ -133,6 +132,7 @@ export const IDENTITY_TEXTS: Record<string, TextAvailability> = {
       'uploadDocument.crop.title',
       'uploadDocument.crop.description',
       'uploadDocument.crop.confirm',
+      'uploadDocument.crop.rotate',
       'uploadDocument.review.tapToEnlarge',
       'uploadDocument.check.title',
     ],

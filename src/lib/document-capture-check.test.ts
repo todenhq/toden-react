@@ -29,6 +29,35 @@ describe('captureCheckProblems', () => {
   });
 });
 
+describe('a document cut off at the frame', () => {
+  it('asks for a retake of that side on false, listed before the face and the barcode', () => {
+    const problems = captureCheckProblems([
+      { side: 'back', face: null, barcode: false, complete: false },
+      { side: 'front', face: false, barcode: null, complete: false },
+    ]);
+    expect(problems).toEqual([
+      { side: 'front', kind: 'not_complete' },
+      { side: 'front', kind: 'no_face' },
+      { side: 'back', kind: 'not_complete' },
+      { side: 'back', kind: 'no_barcode' },
+    ]);
+    expect(captureProblemSides(problems)).toEqual(['front', 'back']);
+    expect(captureProblemMessages([{ side: 'back', kind: 'not_complete' }])).toEqual([
+      "We couldn't see the whole of your ID. Retake it with all four corners inside the frame and a little space around the edges.",
+    ]);
+  });
+
+  it('asks nothing on true, null, or an older server that does not send it', () => {
+    const problems = captureCheckProblems([
+      { side: 'front', face: null, barcode: null, complete: null },
+      { side: 'back', face: null, barcode: null, complete: true },
+      { side: 'front', face: true, barcode: null },
+    ]);
+    expect(problems).toEqual([]);
+    expect(captureProblemSides(problems)).toEqual([]);
+  });
+});
+
 describe('copy', () => {
   it('says what to fix, mirrored word for word across the SDKs', () => {
     expect(captureProblemMessage('no_face')).toBe(
@@ -59,6 +88,7 @@ describe('copy', () => {
     const copy = [
       captureProblemMessage('no_face'),
       captureProblemMessage('no_barcode'),
+      captureProblemMessage('not_complete'),
       CAPTURE_CHECK_TITLE,
       CAPTURE_CHECK_CONTINUE_ANYWAY,
     ];

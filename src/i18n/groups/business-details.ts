@@ -11,6 +11,11 @@ export const BUSINESS_DETAILS_TEXTS: TextEntry[] = [
     multiline: true,
   },
   { key: 'business.details.countryLabel', label: 'Country of registration label', default: 'Country of registration' },
+  {
+    key: 'business.details.countryCaption',
+    label: 'Country of registration caption',
+    default: 'Registered in',
+  },
   { key: 'business.details.countryPinnedLocation', label: 'Country list: your location badge', default: 'Your location' },
   { key: 'business.search.regionLabel', label: 'Search: region label', default: 'State or region of registration' },
   { key: 'business.search.regionPlaceholder', label: 'Search: region placeholder', default: 'Select the state or region' },

@@ -32,7 +32,8 @@ export const UPLOAD_DOCUMENT_REVIEW_ENTRIES: TextEntry[] = [
   },
   { key: 'uploadDocument.crop.heading', label: 'Crop: heading', default: 'Crop to ID Card' },
   { key: 'uploadDocument.crop.hint', label: 'Crop: hint', default: 'Drag to reposition · corner handles to resize' },
-  { key: 'uploadDocument.crop.confirm', label: 'Crop: confirm button', default: 'Crop & Use' },
+  { key: 'uploadDocument.crop.confirm', label: 'Crop: confirm button', default: 'Use photo' },
+  { key: 'uploadDocument.crop.rotate', label: 'Crop: rotate button', default: 'Rotate' },
 
   // Front preview of a two-sided document.
   { key: 'uploadDocument.replace', label: 'Replace button', default: 'Replace' },
@@ -60,6 +61,13 @@ export const UPLOAD_DOCUMENT_REVIEW_ENTRIES: TextEntry[] = [
 
   // The capture check: a photo the verification could not read.
   { key: 'uploadDocument.check.title', label: 'Check: title', default: 'Check your photos' },
+  {
+    key: 'uploadDocument.check.notComplete',
+    label: 'Check: document cut off',
+    default:
+      "We couldn't see the whole of your ID. Retake it with all four corners inside the frame and a little space around the edges.",
+    multiline: true,
+  },
   {
     key: 'uploadDocument.check.noFace',
     label: 'Check: no face on the front',

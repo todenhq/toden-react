@@ -49,3 +49,17 @@ export function TodenWordmark({
     </svg>
   );
 }
+
+/**
+ * The Toden mark alone, the split-shield T, coloured as the wordmark is: the
+ * bar and the shield's left half in `currentColor`, the right half `accent`.
+ */
+export function TodenMark({ className, accent = TODEN_ACCENT }: { className?: string; accent?: string }) {
+  return (
+    <svg viewBox="12 10 76 82" className={className} fill="currentColor" aria-hidden focusable="false">
+      <rect x="15" y="12" width="70" height="13" rx="6.5" />
+      <path d="M35 35H47.5V90C39 83 30 74 30 58V40A5 5 0 0 1 35 35Z" />
+      <path d="M52.5 35H65A5 5 0 0 1 70 40V58C70 74 61 83 52.5 90Z" fill={accent} />
+    </svg>
+  );
+}

@@ -1,62 +1,74 @@
-import { useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { ArrowLeft, Upload, Flash, FlashOff } from '../icons';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { DocumentScanOverlay } from './DocumentScanOverlay';
 import { DocumentGhost, type DocumentSpecimenSubject } from './DocumentGhost';
-import { DocumentPill, HintPill, SCRIM, SideBadge, Shutter } from './parts';
+import { TopBar } from './ImmersiveControls';
+import { BottomBar, HintPill } from './ImmersiveBottomBar';
+import type { HintTone } from './immersive-glass';
 import type { DocumentFraming } from '../../lib/document-framing-gate';
-import type { GuideBand } from '../../lib/document-guide';
-import { cn } from '../../lib/utils';
-import { useText } from '../../i18n';
+import { documentGuideRect, type GuideBand } from '../../lib/document-guide';
+import { immersiveGuideBand } from '../../lib/document-turn';
+import { hintTop, safeTop } from '../../lib/immersive-layout';
+import { TURNED_HINT_ROTATION, turnedHintBox } from '../../lib/turned-hint';
 
-// Everything drawn over the full-screen camera, laid out to match the Flutter
-// document-capture screen: back control top-left, FRONT/BACK badge top-right,
-// the document pill (with its issuing country's flag) centred beneath it, the
-// hint as a dark pill above the controls, then the upload escape, the shutter
-// and the torch.
+// Everything drawn over the full-screen camera, laid out to match the React
+// Native SDK's ImmersiveOverlay (and so the Flutter screen it mirrors): the
+// top bar (back, document pill, side badge), the instruction under it, the
+// guide, then the bottom row (upload, shutter, torch). The numbers are
+// lib/immersive-layout.ts's.
 //
 // The animated frame itself is DocumentScanOverlay — a canvas port of Flutter's
-// scan painter. This file is only the chrome around it, kept separate for the
-// same reason Flutter splits overlay from painter. The individual pieces live
-// in ./parts and are shared with InlineOverlay.
+// scan painter. This file is only the chrome around it.
 
-/** Height of the document pill under the badges (py-2 around a 20 px line). */
-const DOCUMENT_PILL_HEIGHT = '2.25rem';
-/**
- * Room kept above the upload link and shutter for a one-line hint and its gap.
- * Fixed rather than measured, so the guide does not move when the hint changes.
- */
-const HINT_ROOM_PX = 60;
+interface ViewGeometry {
+  width: number;
+  height: number;
+  /** env(safe-area-inset-top) and -bottom, resolved to CSS pixels. */
+  topInset: number;
+  bottomInset: number;
+}
 
 /**
- * The free band between the controls over the camera, measured from the screen
- * as laid out. An upright guide (a long document turned on a tall screen,
- * lib/document-turn.ts) is fitted to it, so it never runs under the badges or
- * the shutter. A new object only when a number changes, so nothing redraws
- * for nothing.
+ * The view's size and its safe-area insets, measured from a probe whose
+ * padding is the insets, so the band is computed from the same numbers the
+ * controls are positioned with. A new object only when a number changes, so
+ * nothing redraws for nothing.
  */
-function useGuideBand(
-  topRef: React.RefObject<HTMLDivElement | null>,
-  controlsRef: React.RefObject<HTMLDivElement | null>,
-): GuideBand | null {
-  const [band, setBand] = useState<GuideBand | null>(null);
+function useViewGeometry(probeRef: React.RefObject<HTMLDivElement | null>): ViewGeometry | null {
+  const [geometry, setGeometry] = useState<ViewGeometry | null>(null);
   useLayoutEffect(() => {
-    const marker = topRef.current;
-    const controls = controlsRef.current;
-    const host = marker?.parentElement;
-    if (!marker || !controls || !host) return undefined;
+    const probe = probeRef.current;
+    const host = probe?.parentElement;
+    if (!probe || !host) return undefined;
     const measure = () => {
-      const origin = host.getBoundingClientRect().top;
-      const top = Math.round(marker.getBoundingClientRect().top - origin);
-      const bottom = Math.round(controls.getBoundingClientRect().top - origin - HINT_ROOM_PX);
-      setBand((prev) => (prev && prev.top === top && prev.bottom === bottom ? prev : { top, bottom }));
+      const style = getComputedStyle(probe);
+      const next: ViewGeometry = {
+        width: host.clientWidth,
+        height: host.clientHeight,
+        topInset: parseFloat(style.paddingTop) || 0,
+        bottomInset: parseFloat(style.paddingBottom) || 0,
+      };
+      if (next.width <= 0 || next.height <= 0) return;
+      setGeometry((prev) =>
+        prev &&
+        prev.width === next.width &&
+        prev.height === next.height &&
+        prev.topInset === next.topInset &&
+        prev.bottomInset === next.bottomInset
+          ? prev
+          : next,
+      );
     };
     measure();
     const observer = typeof ResizeObserver === 'function' ? new ResizeObserver(measure) : null;
     observer?.observe(host);
-    observer?.observe(controls);
-    return () => observer?.disconnect();
-  }, [topRef, controlsRef]);
-  return band;
+    // A rotation can change the insets without resizing the host.
+    window.addEventListener('resize', measure);
+    return () => {
+      observer?.disconnect();
+      window.removeEventListener('resize', measure);
+    };
+  }, [probeRef]);
+  return geometry;
 }
 
 export function ImmersiveOverlay({
@@ -69,6 +81,7 @@ export function ImmersiveOverlay({
   framing,
   progress,
   hint,
+  hintTone,
   busy,
   torch,
   hasTorch,
@@ -91,6 +104,8 @@ export function ImmersiveOverlay({
   framing: DocumentFraming;
   progress: number;
   hint: string;
+  /** The colour of the instruction's icon (immersiveHintTone). */
+  hintTone: HintTone;
   busy: boolean;
   torch: boolean;
   hasTorch: boolean;
@@ -104,19 +119,38 @@ export function ImmersiveOverlay({
   /** Told the free band an upright guide is fitted to, so the guide crop matches. */
   onGuideBand?: (band: GuideBand | null) => void;
 }) {
-  const t = useText();
-  const top = 'calc(env(safe-area-inset-top) + 0.75rem)';
-  const topChromeRef = useRef<HTMLDivElement | null>(null);
-  const controlsRef = useRef<HTMLDivElement | null>(null);
-  const band = useGuideBand(topChromeRef, controlsRef);
+  const probeRef = useRef<HTMLDivElement | null>(null);
+  const geometry = useViewGeometry(probeRef);
+  // The band an upright guide (a turned NIN slip) is fitted to, clear of the
+  // top bar and the bottom row (document-turn.ts immersiveBand).
+  // `geometry` is a new object only when a number changes, so the band is too.
+  const band = useMemo(
+    () => (geometry ? immersiveGuideBand(geometry.height, geometry.topInset, geometry.bottomInset) : null),
+    [geometry],
+  );
   const reportBand = useRef(onGuideBand);
   reportBand.current = onGuideBand;
   useEffect(() => {
     reportBand.current?.(band);
   }, [band]);
 
+  // A turned guide turns the hint with it (lib/turned-hint.ts), beside the
+  // guide; the same rectangle the scan overlay draws.
+  const turnedHint =
+    guideAspect < 1 && geometry && band
+      ? turnedHintBox(documentGuideRect({ width: geometry.width, height: geometry.height }, guideAspect, band))
+      : null;
+
   return (
     <>
+      {/* Measures the safe-area insets: its padding is them. */}
+      <div
+        ref={probeRef}
+        aria-hidden="true"
+        className="pointer-events-none invisible absolute left-0 top-0 h-0 w-0"
+        style={{ paddingTop: 'env(safe-area-inset-top)', paddingBottom: 'env(safe-area-inset-bottom)' }}
+      />
+
       {/* The sample document, under the scan overlay so the guide's corners sit
           on its edges. Keyed by side so turning over shows the other face. */}
       {showSpecimen && (
@@ -138,83 +172,48 @@ export function ImmersiveOverlay({
         primaryColor={primaryColor}
       />
 
-      {/* Where the top controls end: the bottom of the document pill. */}
-      <div
-        ref={topChromeRef}
-        aria-hidden="true"
-        className="pointer-events-none absolute inset-x-0"
-        style={{ top: `calc(${top} + 3.25rem + ${DOCUMENT_PILL_HEIGHT})`, height: 0 }}
+      <TopBar
+        onBack={onBack}
+        country={country}
+        documentLabel={documentLabel}
+        side={side}
+        primaryColor={primaryColor}
       />
 
-      {onBack && (
-        <button
-          type="button"
-          onClick={onBack}
-          aria-label="Go back"
-          className="absolute z-20 flex h-11 w-11 items-center justify-center rounded-full text-white backdrop-blur-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70"
-          style={{ top, left: '1rem', backgroundColor: SCRIM }}
+      {/* The instruction, under the top bar; beside a turned guide instead. */}
+      {turnedHint ? (
+        <div
+          className="pointer-events-none absolute z-20 flex items-center justify-center"
+          style={{
+            left: turnedHint.left,
+            top: turnedHint.top,
+            width: turnedHint.width,
+            height: turnedHint.height,
+            transform: `rotate(${TURNED_HINT_ROTATION})`,
+          }}
         >
-          <ArrowLeft className="h-5 w-5" />
-        </button>
+          <HintPill hint={hint} tone={hintTone} primaryColor={primaryColor} maxWidth="100%" />
+        </div>
+      ) : (
+        <div
+          className="pointer-events-none absolute inset-x-0 z-20 flex justify-center"
+          style={{ top: safeTop(hintTop(0)) }}
+        >
+          <HintPill hint={hint} tone={hintTone} primaryColor={primaryColor} maxWidth="88%" />
+        </div>
       )}
 
-      <SideBadge side={side} primaryColor={primaryColor} style={{ top, right: '1rem' }} />
-
-      <DocumentPill
-        label={documentLabel}
-        country={country}
-        style={{ top: `calc(${top} + 3.25rem)` }}
+      <BottomBar
+        onUpload={onUpload}
+        onCapture={onCapture}
+        busy={busy}
+        progress={progress}
+        blockedReason={shutterBlockedReason}
+        hasTorch={hasTorch}
+        torch={torch}
+        onToggleTorch={onToggleTorch}
+        primaryColor={primaryColor}
       />
-
-      {/* Bottom stack: hint pill → upload escape → shutter + torch. */}
-      <div className="pointer-events-none absolute inset-x-0 bottom-0 z-20 flex flex-col items-center gap-5 px-5 pb-[calc(env(safe-area-inset-bottom)+1.5rem)]">
-        <HintPill>{hint}</HintPill>
-
-        {/* The upload link and the shutter row: where the free band ends. */}
-        <div ref={controlsRef} className="flex w-full flex-col items-center gap-5">
-          {onUpload && (
-            <button
-              type="button"
-              onClick={onUpload}
-              className="pointer-events-auto inline-flex items-center gap-2 text-sm font-medium text-white/90 focus-visible:outline-none focus-visible:underline"
-            >
-              <Upload className="h-4 w-4" />
-              {t('uploadDocument.camera.uploadInstead')}
-            </button>
-          )}
-
-          <div className="relative flex w-full items-center justify-center">
-            <Shutter
-              onCapture={onCapture}
-              busy={busy}
-              primaryColor={primaryColor}
-              blockedReason={shutterBlockedReason}
-            />
-
-            {/* Torch sits bottom-right rather than beside the shutter, matching
-                Flutter. Hidden entirely when the device cannot toggle it. */}
-            {hasTorch && (
-              <button
-                type="button"
-                onClick={onToggleTorch}
-                aria-label={torch ? 'Turn torch off' : 'Turn torch on'}
-                aria-pressed={torch}
-                className={cn(
-                  'pointer-events-auto absolute right-0 flex h-12 w-12 items-center justify-center rounded-full backdrop-blur-sm',
-                  'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70',
-                  torch ? 'text-black' : 'text-white',
-                )}
-                style={{ backgroundColor: torch ? '#ffffff' : SCRIM }}
-              >
-                {/* One family for one toggle: Flash and FlashOff are the same bolt,
-                    slashed or not. Zap is a different shape in this icon set, so the
-                    pair this used to make swapped two unrelated glyphs on one button. */}
-                {torch ? <Flash className="h-5 w-5" /> : <FlashOff className="h-5 w-5" />}
-              </button>
-            )}
-          </div>
-        </div>
-      </div>
     </>
   );
 }

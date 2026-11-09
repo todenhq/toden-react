@@ -10,11 +10,13 @@
 /** Share of the viewfinder width the guide spans. */
 export const DOCUMENT_GUIDE_WIDTH_FRACTION = 0.88;
 
-/** Upward nudge so the shutter button clears the guide's bottom edge. */
+/** Upward nudge of the band-less guide (a fallback: the inline camera now passes inlineGuideBand). */
 export const DOCUMENT_GUIDE_TOP_SHIFT = 20;
 
 /**
- * Ceiling on the guide's height, as a share of the viewfinder.
+ * Ceiling on the band-less guide's height, as a share of the viewfinder (a
+ * fallback: the inline camera now passes inlineGuideBand, and the full-screen
+ * camera follows the React Native guideRect).
  *
  * Width alone is not enough. Deriving height from width means a SQUARER
  * document (a passport page at 1.42 vs a card at 1.586) grows taller, and on a
@@ -31,17 +33,21 @@ export interface GuideRect {
 }
 
 /**
- * The free stretch of the viewfinder between the controls drawn over it, in
- * the viewfinder's CSS pixels: `top` is where the top controls end, `bottom`
- * where the bottom controls begin.
+ * The free stretch of the viewfinder an upright guide may fill, in the
+ * viewfinder's CSS pixels: `top` and `bottom` already keep the clear space
+ * from the controls drawn over it (document-turn.ts immersiveGuideBand).
  */
 export interface GuideBand {
   top: number;
   bottom: number;
+  /**
+   * Fit a LANDSCAPE guide into the band as well (the inline desktop camera,
+   * inline-layout.ts inlineGuideBand). The full-screen camera leaves this
+   * unset: there a landscape guide is centred in the whole view, as the React
+   * Native guideRect does, and only an upright guide uses the band.
+   */
+  fitLandscape?: boolean;
 }
-
-/** Room kept between an upright guide and the controls above and below it. */
-export const UPRIGHT_GUIDE_BAND_MARGIN = 12;
 
 /**
  * The guide rectangle inside a viewfinder of `size` for a document of `aspect`
@@ -51,11 +57,20 @@ export const UPRIGHT_GUIDE_BAND_MARGIN = 12;
  *
  * An UPRIGHT guide (aspect below 1, a long document turned on a tall screen,
  * see lib/document-turn.ts) sized from the width would run to most of the
- * screen's height, under the badges at the top and the hint and shutter at the
- * bottom. Given the free `band` between those controls it is fitted to that
- * band instead (less a small margin each end), still capped at the usual share
- * of the width. A landscape guide ignores the band, so every other document
- * frames exactly as before.
+ * screen's height, under the top bar and the bottom row. Given the free `band`
+ * between those controls it is fitted to that band instead, centred in it,
+ * still capped at the usual share of the width (the React Native guideRect).
+ *
+ * A LANDSCAPE guide (every card and passport) given a band is on the
+ * full-screen phone camera, the only caller that passes one: there it is the
+ * React Native guideRect too, 88% of the width and centred in the view, with
+ * no upward nudge and no height cap.
+ *
+ * A band marked `fitLandscape` (the inline desktop camera, see
+ * inline-layout.ts) fits ANY guide inside it: 88% of the width, shrunk to the
+ * band's height if it is taller, centred in the band, so the top row, the
+ * instruction and the shutter never touch it. With no band at all it keeps
+ * the old upward nudge and height cap, a fallback no camera uses any more.
  *
  * This is the one rectangle the overlay paints, the sample sits on and the
  * guide-based crop takes, so pass all three the same band.
@@ -65,9 +80,28 @@ export function documentGuideRect(
   aspect: number,
   band?: GuideBand | null,
 ): GuideRect {
+  if (band?.fitLandscape) {
+    const top = Math.max(0, band.top);
+    const bottom = Math.min(size.height, band.bottom);
+    if (bottom - top > 0) {
+      let width = size.width * DOCUMENT_GUIDE_WIDTH_FRACTION;
+      let height = width / aspect;
+      if (height > bottom - top) {
+        height = bottom - top;
+        width = height * aspect;
+      }
+      return {
+        x: (size.width - width) / 2,
+        y: top + (bottom - top - height) / 2,
+        width,
+        height,
+      };
+    }
+  }
+
   if (aspect < 1 && band) {
-    const top = Math.max(0, band.top) + UPRIGHT_GUIDE_BAND_MARGIN;
-    const bottom = Math.min(size.height, band.bottom) - UPRIGHT_GUIDE_BAND_MARGIN;
+    const top = Math.max(0, band.top);
+    const bottom = Math.min(size.height, band.bottom);
     if (bottom - top > 0) {
       let height = bottom - top;
       let width = height * aspect;
@@ -87,6 +121,15 @@ export function documentGuideRect(
 
   let width = size.width * DOCUMENT_GUIDE_WIDTH_FRACTION;
   let height = width / aspect;
+
+  if (band && aspect >= 1) {
+    return {
+      x: (size.width - width) / 2,
+      y: (size.height - height) / 2,
+      width,
+      height,
+    };
+  }
 
   const maxHeight = size.height * DOCUMENT_GUIDE_MAX_HEIGHT_FRACTION;
   if (height > maxHeight) {

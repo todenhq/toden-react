@@ -16,6 +16,15 @@
 // The same rule (and the same numbers) lives in the React Native and Flutter
 // SDKs: change it in all three.
 
+import type { GuideBand } from './document-guide';
+import {
+  bottomRowReserve,
+  GUIDE_GAP_ABOVE_CONTROLS,
+  GUIDE_GAP_BELOW_TOP_BAR,
+  TOP_BAR_HEIGHT,
+  topBarTop,
+} from './immersive-layout';
+
 /** Only a document at least this long (width over height) is ever turned. */
 export const TURN_MIN_DOCUMENT_ASPECT = 1.8;
 
@@ -35,6 +44,27 @@ export function turnsDocument(documentAspect: number, viewAspect: number): boole
 /** The on-screen guide aspect: upright (1 / aspect) when turned, else as is. */
 export function onScreenGuideAspect(documentAspect: number, viewAspect: number): number {
   return turnsDocument(documentAspect, viewAspect) ? 1 / documentAspect : documentAspect;
+}
+
+/** The inline (desktop) camera box's width over height (DocumentCaptureStep). */
+export const INLINE_VIEW_ASPECT = 16 / 10;
+
+/**
+ * The crop box for a picked photo, shaped as the camera guide would be on this
+ * device: the camera view is the inline box on a desktop, which never turns,
+ * and the full screen on a phone, so there the screen's shape decides. A
+ * `turned` crop is turned back to landscape before it is stored, as an upright
+ * capture is.
+ */
+export function documentCropGuide(
+  documentAspect: number,
+  { desktop, screenAspect }: { desktop: boolean; screenAspect: number },
+): { aspect: number; turned: boolean } {
+  const viewAspect = desktop ? INLINE_VIEW_ASPECT : screenAspect;
+  return {
+    aspect: onScreenGuideAspect(documentAspect, viewAspect),
+    turned: turnsDocument(documentAspect, viewAspect),
+  };
 }
 
 /**
@@ -61,6 +91,28 @@ export function applyMatrix(
 }
 
 /**
+ * The canvas transform that turns a `width` × `height` image `turns` quarter
+ * turns CLOCKWISE (the photo cropper's Rotate), in the same `[a, b, c, d, e, f]`
+ * form. An odd number of turns swaps the width and the height.
+ */
+export function clockwiseQuarterTurns(
+  width: number,
+  height: number,
+  turns: number,
+): { width: number; height: number; matrix: [number, number, number, number, number, number] } {
+  switch (((turns % 4) + 4) % 4) {
+    case 1: // (x, y) lands at (height - y, x)
+      return { width: height, height: width, matrix: [0, 1, -1, 0, height, 0] };
+    case 2:
+      return { width, height, matrix: [-1, 0, 0, -1, width, height] };
+    case 3:
+      return counterClockwiseQuarterTurn(width, height);
+    default:
+      return { width, height, matrix: [1, 0, 0, 1, 0, 0] };
+  }
+}
+
+/**
  * A new canvas holding `source` turned a quarter counter-clockwise. Null when
  * the browser gives no 2D context, so the caller keeps the unturned photo
  * rather than losing it.
@@ -75,4 +127,31 @@ export function turnCanvasBack(source: HTMLCanvasElement): HTMLCanvasElement | n
   ctx.setTransform(...turn.matrix);
   ctx.drawImage(source, 0, 0);
   return canvas;
+}
+
+/**
+ * The screen space above and below the free band an upright guide may use on
+ * the full-screen camera, in the same form as the React Native SDK's
+ * immersiveBand. An upright guide is a turned NIN slip, whose hint is drawn
+ * turned beside it (turned-hint.ts), so above it is only the top bar (back,
+ * document pill, side badge) and 16 of clear space; below it, 24 of clear
+ * space and the bottom row (upload, shutter, torch). The numbers are the
+ * overlay's own (immersive-layout.ts), so the band always matches what is
+ * drawn.
+ */
+export function immersiveBand(topInset: number, bottomInset: number): { topReserve: number; bottomReserve: number } {
+  return {
+    topReserve: topBarTop(topInset) + TOP_BAR_HEIGHT + GUIDE_GAP_BELOW_TOP_BAR,
+    bottomReserve: bottomRowReserve(bottomInset) + GUIDE_GAP_ABOVE_CONTROLS,
+  };
+}
+
+/**
+ * immersiveBand as the free stretch of a view `height` tall
+ * (document-guide.ts GuideBand), which documentGuideRect fits an upright guide
+ * to, centred, exactly as the React Native guideRect does.
+ */
+export function immersiveGuideBand(height: number, topInset: number, bottomInset: number): GuideBand {
+  const { topReserve, bottomReserve } = immersiveBand(topInset, bottomInset);
+  return { top: topReserve, bottom: height - bottomReserve };
 }

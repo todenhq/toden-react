@@ -15,6 +15,7 @@ const WORKFLOW_KEYS = [
   'country',
   'countries',
   'idTypes',
+  'idSelectionLayout',
   // Multi-ID (KYC only; deliberately NOT in APPLICANT_LEG_KEYS below — a KYB
   // applicant leg is one person's single check inside a business application).
   'multiId',
@@ -124,6 +125,7 @@ const APPLICANT_LEG_KEYS = [
   'country',
   'countries',
   'idTypes',
+  'idSelectionLayout',
   'enableSelfie',
   'enableDocumentCapture',
   'allowDocumentUpload',

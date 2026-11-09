@@ -30,7 +30,7 @@ export const ADDRESS_BACKGROUND_ENTRIES: TextEntry[] = [
     default: "Allow location all the time and your phone checks in on its own while you're at the premises.",
     multiline: true,
   },
-  { key: 'address.background.allow', label: 'Background checks: allow button', default: 'Turn on automatic checks' },
+  { key: 'address.background.allow', label: 'Background checks: allow button', default: 'Continue with automatic checks' },
   { key: 'address.background.later', label: 'Background checks: later button', default: 'Not now' },
   {
     key: 'address.presence.off.title',

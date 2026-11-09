@@ -1,8 +1,8 @@
 // Reading the server's capture check into what the applicant is asked to fix.
 //
 // After a document is uploaded, `POST /api/v1/document-capture/check` says
-// whether the verification can read it: a face on the printed photo, a barcode
-// that decodes. `false` means a detector looked and found nothing, which is worth
+// whether the verification can read it: the whole document in the frame, a face
+// on the printed photo, a barcode that decodes. `false` means a detector looked and found nothing, which is worth
 // a retake; `null` means it was not checked or could not look, which is not. A
 // detector can miss, so the applicant can always continue anyway.
 //
@@ -20,9 +20,11 @@ export interface DocumentCaptureCheckResult {
   side: CaptureSide;
   face: boolean | null;
   barcode: boolean | null;
+  /** All four corners inside the photo. Absent from servers that do not check it. */
+  complete?: boolean | null;
 }
 
-export type CaptureProblemKind = 'no_face' | 'no_barcode';
+export type CaptureProblemKind = 'not_complete' | 'no_face' | 'no_barcode';
 
 export interface CaptureProblem {
   side: CaptureSide;
@@ -34,16 +36,22 @@ export const CAPTURE_CHECK_TITLE = 'Check your photos';
 export const CAPTURE_CHECK_CONTINUE_ANYWAY = 'Continue anyway';
 
 const MESSAGE_KEYS: Record<CaptureProblemKind, string> = {
+  not_complete: 'uploadDocument.check.notComplete',
   no_face: 'uploadDocument.check.noFace',
   no_barcode: 'uploadDocument.check.noBarcode',
 };
 
-/** What to fix, front before back and the face before the barcode. */
+/**
+ * What to fix, front before back and, within a side, a cut-off document before
+ * the face and the barcode: a photo missing part of the ID is usually why the
+ * others failed, and one retake fixes all three.
+ */
 export function captureCheckProblems(results: Array<DocumentCaptureCheckResult | null>): CaptureProblem[] {
   const problems: CaptureProblem[] = [];
   for (const side of ['front', 'back'] as const) {
     for (const result of results) {
       if (!result || result.side !== side) continue;
+      if (result.complete === false) problems.push({ side, kind: 'not_complete' });
       if (result.face === false) problems.push({ side, kind: 'no_face' });
       if (result.barcode === false) problems.push({ side, kind: 'no_barcode' });
     }

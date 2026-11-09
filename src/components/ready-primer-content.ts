@@ -37,7 +37,7 @@ export const READY_LIVENESS: ReadyContent = {
   body: "You'll follow a few short prompts on screen. This proves a real person is present, not a photo or a recording.",
   checklist: [
     { icon: UserRound, label: 'Put your face in the circle' },
-    { icon: Glasses, label: 'Take off glasses or anything covering your face' },
+    { icon: Glasses, label: 'Take off glasses, hats, caps or anything covering your face' },
     { icon: Sun, label: 'Choose a bright spot, with the light in front of you' },
     { icon: FlashOff, label: 'Keep glare and shiny reflections off your face' },
   ],

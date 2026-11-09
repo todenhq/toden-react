@@ -17,6 +17,8 @@ import { resolveIdTypeDefinition } from '../utils/id-definitions';
 import { VerificationError, type VerificationErrorCode } from '../types/verification';
 import { safeReportError } from '../lib/errors';
 import { useDeviceIntelSetup } from '../lib/use-device-intel-setup';
+import { withoutUnchosenIdTypes } from '../lib/chosen-only-ids';
+import { isRetiredIdType } from '../lib/retired-id-types';
 
 // ---------------------------------------------------------------------------
 // Config value — the subset of VerificationConfig that steps need at runtime
@@ -123,6 +125,8 @@ export interface VerificationConfigValue {
   business?: WorkflowBusinessConfig;
   /** Subset of ID types to offer. Only types valid for `country` will appear. */
   idTypes?: AnyIdType[];
+  /** Where a multi-country flow picks the country (lib/id-selection-layout.ts). */
+  idSelectionLayout?: import('../lib/id-selection-layout').IdSelectionLayout;
   metadata?: Record<string, string>;
   /** The org's user reference → Entity.externalUserId at the seam (not matched). */
   userId?: string;
@@ -474,13 +478,26 @@ export function VerificationConfigProvider({ children, apiOverride, serverConfig
   const nonEmpty = (ids: AnyIdType[] | undefined): AnyIdType[] | undefined =>
     ids && ids.length > 0 ? ids : undefined;
 
+  // A workflow handed in directly (the builder's preview) gets the full grant
+  // list from /config, so the chosen-only IDs it does not list are dropped
+  // here, as the server drops them for a workflow session (lib/chosen-only-ids).
+  const workflowMount = Boolean(effective.workflowId || config.previewMode);
+  // Retired types (BVN Premium) go for every mount (lib/retired-id-types).
+  const servedConfig = useMemo<ServerSdkConfig>(() => {
+    const offered = serverConfig.idTypes.filter((row) => !isRetiredIdType(row.country, row.idType));
+    return { ...serverConfig, idTypes: workflowMount ? withoutUnchosenIdTypes(offered, effective) : offered };
+  },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [workflowMount, serverConfig, effective.country, effective.idTypes, effective.countries],
+  );
+
   const value = useMemo<VerificationConfigValue>(
     () => ({
       ...effective,
       country: effectiveCountry,
       idTypes: nonEmpty(countryEntry?.idTypes) ?? nonEmpty(effective.idTypes),
       api,
-      serverConfig,
+      serverConfig: servedConfig,
       getIdTypeFeatures: (country, idType) =>
         idTypesByKey.get(`${country}/${idType}`)?.features ?? null,
       getIdTypeDefinition: (idType, country) =>
@@ -543,6 +560,7 @@ export function VerificationConfigProvider({ children, apiOverride, serverConfig
       config.onClose,
       config.onError,
       serverConfig,
+      servedConfig,
       idTypesByKey,
     ],
   );

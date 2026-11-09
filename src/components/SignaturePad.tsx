@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { Maximize2, Minimize2 } from './icons';
+import { Maximize2, Minimize2, RotateCcw } from './icons';
 import {
   hasSignature,
   MAX_POINTS,
@@ -165,7 +165,7 @@ export function SignaturePad({
   };
 
   return (
-    <div className="space-y-2">
+    <div>
       <div className="relative overflow-hidden rounded-xl border-2 border-dashed border-border bg-white">
         <canvas
           ref={canvasRef}
@@ -205,16 +205,21 @@ export function SignaturePad({
             {hint}
           </p>
         )}
-      </div>
-      <div className="flex justify-end">
-        <button
-          type="button"
-          onClick={clear}
-          disabled={disabled || empty}
-          className="min-h-11 rounded-lg px-3 text-xs font-medium text-primary transition-colors hover:bg-primary/10 disabled:opacity-50"
-        >
-          {clearLabel}
-        </button>
+        {/* Clear lives in the box too, in the other top corner, and only once
+            there is ink to clear: on a row of its own under the box it took a
+            full button's height from every signature card for something that
+            does nothing until somebody has drawn. */}
+        {!empty && (
+          <button
+            type="button"
+            onClick={clear}
+            disabled={disabled}
+            className="absolute left-2 top-2 flex h-7 items-center gap-1 rounded-full border border-neutral-300 bg-white/95 px-2.5 text-[11px] font-semibold text-neutral-800 shadow-sm transition-colors before:absolute before:-inset-2 before:content-[''] hover:bg-neutral-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-neutral-800 disabled:opacity-50"
+          >
+            <RotateCcw className="h-3 w-3" aria-hidden="true" />
+            {clearLabel}
+          </button>
+        )}
       </div>
     </div>
   );

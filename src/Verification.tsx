@@ -163,6 +163,7 @@ function VerificationInner({
   country,
   countries,
   idTypes,
+  idSelectionLayout,
   multiId,
   resubmit,
   metadata,
@@ -236,6 +237,7 @@ function VerificationInner({
     ...(workflowId ? { workflowId } : {}),
     ...(idTypes ? { idTypes } : {}),
     ...(countries ? { countries } : {}),
+    ...(idSelectionLayout ? { idSelectionLayout } : {}),
     ...(multiId ? { multiId } : {}),
     ...(enableSelfie !== undefined ? { enableSelfie } : {}),
     ...(enableDocumentCapture !== undefined ? { enableDocumentCapture } : {}),
@@ -276,7 +278,7 @@ function VerificationInner({
     ...(userData ? { userData } : {}),
     ...(businessPrefill ? { businessPrefill } : {}),
     ...(assetsBasePath ? { assetsBasePath } : {}),
-  }), [country, workflowId, idTypes, countries, multiId, enableSelfie, enableDocumentCapture, allowDocumentUpload, allowDocumentScan, documentReview, documentAudio, livenessAudio, enableLiveness, livenessMode, flashSequenceLength, livenessBrightScreen, selfieReview, deviceIntelligence, deviceHandoff, consentStep, silentCapture, biometric, requireMobileDevice, voiceGuidance, showThemeToggle, progressStyle, fullScreen, disableClose, appearance, consent, success, texts, emailVerification, phoneVerification, questionnaire, proofOfAddress, supportingDocuments, addressCollection, nfc, metadata, userId, userData, businessPrefill, assetsBasePath]);
+  }), [country, workflowId, idTypes, countries, idSelectionLayout, multiId, enableSelfie, enableDocumentCapture, allowDocumentUpload, allowDocumentScan, documentReview, documentAudio, livenessAudio, enableLiveness, livenessMode, flashSequenceLength, livenessBrightScreen, selfieReview, deviceIntelligence, deviceHandoff, consentStep, silentCapture, biometric, requireMobileDevice, voiceGuidance, showThemeToggle, progressStyle, fullScreen, disableClose, appearance, consent, success, texts, emailVerification, phoneVerification, questionnaire, proofOfAddress, supportingDocuments, addressCollection, nfc, metadata, userId, userData, businessPrefill, assetsBasePath]);
 
   // Pre-load MediaPipe Face Mesh model as soon as the SDK mounts and apply the
   // voice-guidance config (enabled + language) for the spoken liveness prompts.
@@ -563,6 +565,7 @@ function VerificationInner({
       country={country as AnyCountry}
       countries={countries}
       idTypes={idTypes}
+      idSelectionLayout={idSelectionLayout}
       multiId={multiId}
       resubmit={resubmit}
       metadata={metadata}

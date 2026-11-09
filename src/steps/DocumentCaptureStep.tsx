@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useRef, useCallback, useEffect } from "react";
+import React, { useState, useRef, useCallback, useEffect, useMemo } from "react";
 import {
 	Upload,
 	RotateCcw,
@@ -9,7 +9,6 @@ import {
 	Camera,
 	TriangleAlert,
 	CreditCard,
-	ArrowLeft,
 	ImageUp,
 } from '../components/icons';
 import { StepHeader } from "../components/StepHeader";
@@ -37,6 +36,9 @@ import { useImageCompress } from "../hooks/useImageCompress";
 import { useTorch } from "../hooks/useTorch";
 import { useViewAspect } from "../hooks/useViewAspect";
 import { ImmersiveOverlay } from "../components/viewfinder/ImmersiveOverlay";
+import { BackButton } from "../components/viewfinder/ImmersiveControls";
+import { documentHintIsAction, immersiveHintTone } from "../components/viewfinder/immersive-glass";
+import { SIDE_MARGIN, safeTop, topBarTop } from "../lib/immersive-layout";
 import { InlineOverlay } from "../components/viewfinder/InlineOverlay";
 import { useSetImmersiveCapture } from "../components/immersive-capture";
 import { isDesktopDevice } from "../lib/device";
@@ -45,7 +47,8 @@ import {
 	documentGuideAspect,
 	type GuideBand,
 } from "../lib/document-guide";
-import { onScreenGuideAspect, turnsDocument } from "../lib/document-turn";
+import { documentCropGuide, onScreenGuideAspect, turnsDocument } from "../lib/document-turn";
+import { inlineGuideBand } from "../lib/inline-layout";
 import { bleedCropRect, coverVisibleRegion } from "../lib/document-corners";
 import { CORNER_HINTS, withCornerGuidance } from "../lib/document-hints";
 import { cropVideoFrame } from "../lib/video-crop";
@@ -299,6 +302,19 @@ export function DocumentCaptureStep() {
 	// before it is stored, so everything after the camera sees a landscape slip.
 	const viewAspect = useViewAspect(viewportRef, viewfinderVisible);
 	const turned = viewAspect !== null && turnsDocument(documentAspect, viewAspect);
+	// A picked photo's crop box takes the guide's shape on this device: a NIN
+	// slip stands upright on a phone, and its crop is turned back to landscape
+	// before it is stored, as the camera's is. Decided once per photo, so a turn
+	// of the phone mid-crop does not reshape a box already placed.
+	const cropGuide = useMemo(
+		() =>
+			documentCropGuide(documentAspect, {
+				desktop: isDesktopDevice(),
+				screenAspect: typeof window === "undefined" ? 1 : window.innerWidth / window.innerHeight,
+			}),
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+		[documentAspect, cropperSrc],
+	);
 	// The guide on screen, and the shape the detector and the gate look for.
 	const guideAspect =
 		viewAspect !== null ? onScreenGuideAspect(documentAspect, viewAspect) : documentAspect;
@@ -333,7 +349,6 @@ export function DocumentCaptureStep() {
 		camera.videoRef,
 		cameraActive && camera.isReady,
 	);
-	const isDim = lightLevel === "dark";
 	const isBright = lightLevel === "bright";
 
 	// ── Immersive capture (mobile) ──────────────────────────────────────────
@@ -367,12 +382,17 @@ export function DocumentCaptureStep() {
 		!needsPrimer &&
 		!showFlipBanner;
 
+	// A picked photo's crop screen takes the surface on a phone too, as the
+	// React Native cropper does: it opens from the full-screen camera and is
+	// its own full-screen editor (components/ImageCropper.tsx, `immersive`).
+	const cropFullScreen = !!cropperSrc && !isDesktopDevice();
+
 	useEffect(() => {
-		setImmersiveCapture(immersive);
+		setImmersiveCapture(immersive || cropFullScreen);
 		// Release on unmount too: leaving mid-capture (back, an error boundary,
 		// a completed capture) must not strand the modal without its chrome.
 		return () => setImmersiveCapture(false);
-	}, [immersive, setImmersiveCapture]);
+	}, [immersive, cropFullScreen, setImmersiveCapture]);
 
 	const specimenCountry = state.selectedCountry ?? config.country ?? null;
 	const specimen: DocumentSpecimenSubject = {
@@ -787,13 +807,19 @@ export function DocumentCaptureStep() {
 			// not the whole frame. The preview is `object-cover`, so the user only
 			// saw a slice of the sensor frame; keeping all of it hands back a
 			// wider, zoomed-out photo than the one they framed.
+			// The band is the one the overlay drew the guide in: the full-screen
+			// overlay reports its own; the inline box's follows from its size
+			// (lib/inline-layout.ts), exactly as InlineOverlay computes it.
 			const viewport = viewportRef.current;
-			crop = viewport
+			const view = viewport
+				? { width: viewport.clientWidth, height: viewport.clientHeight }
+				: null;
+			crop = view
 				? documentCropRect({
 						frame,
-						view: { width: viewport.clientWidth, height: viewport.clientHeight },
+						view,
 						aspect: guideAspect,
-						band: immersive ? guideBandRef.current : null,
+						band: immersive ? guideBandRef.current : inlineGuideBand(view),
 					})
 				: null;
 		}
@@ -1061,6 +1087,25 @@ export function DocumentCaptureStep() {
 			setCropperSrc(null);
 			setPauseForCrop(false);
 		};
+		if (cropFullScreen) {
+			return (
+				<div className='flex min-h-0 flex-1 flex-col'>
+					<ImageCropper
+						layout='immersive'
+						src={cropperSrc}
+						aspect={cropGuide.aspect}
+						turnBack={cropGuide.turned}
+						documentLabel={
+							state.selectedIdType ?
+								shortDocumentLabel(state.selectedIdType, idTypeLabel)
+							:	undefined
+						}
+						onConfirm={handleCropConfirm}
+						onCancel={cancelCrop}
+					/>
+				</div>
+			);
+		}
 		return (
 			<div className='space-y-4 animate-slide-up'>
 				<StepHeader
@@ -1072,7 +1117,8 @@ export function DocumentCaptureStep() {
 				/>
 				<ImageCropper
 					src={cropperSrc}
-					aspect={documentAspect}
+					aspect={cropGuide.aspect}
+					turnBack={cropGuide.turned}
 					onConfirm={handleCropConfirm}
 					onCancel={cancelCrop}
 				/>
@@ -1329,9 +1375,18 @@ export function DocumentCaptureStep() {
 								framing={guidance.framing}
 								progress={dwell}
 								hint={documentHintText(guidance.hint, idTypeLabel, t)}
+								hintTone={immersiveHintTone({
+									hint: guidance.hint,
+									framing: guidance.framing,
+									hintIsAction: shutterBlocked || documentHintIsAction(guidance.hint),
+									blocked: shutterBlocked,
+								})}
 								busy={isCompressing}
 								onCapture={handleManualCapture}
 								shutterBlockedReason={shutterBlockedReason}
+								hasTorch={torch.hasTorch}
+								torch={torch.torch}
+								onToggleTorch={torch.toggleTorch}
 								primaryColor={config.appearance?.primaryColor ?? "#5645F5"}
 							/>
 						)}
@@ -1347,6 +1402,12 @@ export function DocumentCaptureStep() {
 								framing={guidance.framing}
 								progress={dwell}
 								hint={documentHintText(guidance.hint, idTypeLabel, t)}
+								hintTone={immersiveHintTone({
+									hint: guidance.hint,
+									framing: guidance.framing,
+									hintIsAction: shutterBlocked || documentHintIsAction(guidance.hint),
+									blocked: shutterBlocked,
+								})}
 								busy={isCompressing}
 								torch={torch.torch}
 								hasTorch={torch.hasTorch}
@@ -1371,17 +1432,13 @@ export function DocumentCaptureStep() {
 								    way back while the stream comes up — without it a slow
 								    camera traps the user on a black screen. */}
 								{immersive && (
-									<button
-										type='button'
+									// Where the top bar's back control will be, so it does not
+									// move when the camera comes up.
+									<BackButton
 										onClick={handleBack}
-										aria-label='Go back'
-										className='absolute left-4 flex h-11 w-11 items-center justify-center rounded-full text-white backdrop-blur-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70'
-										style={{
-											top: "calc(env(safe-area-inset-top) + 0.75rem)",
-											backgroundColor: "rgba(0,0,0,0.45)",
-										}}>
-										<ArrowLeft className='h-5 w-5' />
-									</button>
+										className='absolute'
+										style={{ top: safeTop(topBarTop(0)), left: SIDE_MARGIN }}
+									/>
 								)}
 							</div>
 						)}
@@ -1440,7 +1497,10 @@ export function DocumentCaptureStep() {
 						</p>
 					)}
 
-					{!immersive && (isDim || isBright) && (
+					{/* Only "too bright" here: "too dark" is the instruction inside the
+					    box already (the framing gate's moreLight hint), so a tip
+					    beneath it would say the same thing twice. */}
+					{!immersive && isBright && (
 						<div className='flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2.5 text-xs text-amber-800 animate-lighting-in dark:border-amber-800 dark:bg-amber-900/20 dark:text-amber-400'>
 							<svg
 								xmlns='http://www.w3.org/2000/svg'
@@ -1457,11 +1517,7 @@ export function DocumentCaptureStep() {
 								<path d='M9 18h6M10 22h4' />
 							</svg>
 							<span>
-								{t(
-									isBright ?
-										"uploadDocument.camera.tooBright"
-									:	"uploadDocument.camera.tooDark",
-								)}
+								{t("uploadDocument.camera.tooBright")}
 							</span>
 						</div>
 					)}

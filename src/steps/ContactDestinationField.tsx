@@ -23,6 +23,7 @@ export function ContactDestinationField({
   geoCountry,
   disabled,
   scopedBusiness,
+  countries,
 }: {
   isEmail: boolean;
   email: string;
@@ -34,6 +35,8 @@ export function ContactDestinationField({
   disabled?: boolean;
   /** A scoped business workflow: the field asks for the company's contact. */
   scopedBusiness?: boolean;
+  /** The dial-code countries the workflow offers; absent = all. */
+  countries?: readonly string[];
 }) {
   const t = useText();
   if (isEmail) {
@@ -61,6 +64,7 @@ export function ContactDestinationField({
         defaultCountry={defaultCountry}
         geoCountry={geoCountry}
         disabled={disabled}
+        countries={countries}
         onChange={onPhoneChange}
       />
     </div>

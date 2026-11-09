@@ -1,8 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
-import { X } from '../components/icons';
-import { Drawer, DrawerContent, DrawerTitle } from '../components/ui/drawer';
+import { Drawer, DrawerContent, SheetHeader, useSheetClose } from '../components/ui/drawer';
 import { Button } from '../components/ui/button';
 import { cn } from '../lib/utils';
 import { KeyPersonForm } from './KeyPersonForm';
@@ -64,6 +63,8 @@ export function KeyPersonSheet({
   defaultCountry?: string;
 }) {
   const t = useText();
+  // Close and dismiss slide the sheet away before the parent removes it.
+  const sheet = useSheetClose(onClose);
   const [draft, setDraft] = useState<KeyPersonEntry>(initial);
   // Bottom drawer on mobile; side sheet from the right on desktop — matching
   // the modal's own layout breakpoint. Decided once per open (no resize
@@ -91,27 +92,19 @@ export function KeyPersonSheet({
   const canSave = isKeyPersonRowValid(draft);
 
   return (
-    <Drawer open direction={direction} onOpenChange={(open) => !open && onClose()}>
+    <Drawer direction={direction} {...sheet.rootProps}>
       <DrawerContent direction={direction}>
-        <div className={cn('flex items-center justify-between px-4 sm:px-6', direction === 'right' ? 'pt-5' : 'pt-3')}>
-          <DrawerTitle className="text-base font-bold">
-            {t(
-              mode === 'add'
-                ? ADD_TITLES[section]
-                : draft.isCorporate
-                  ? 'keyPeople.sheet.editCompany'
-                  : 'keyPeople.sheet.editPerson',
-            )}
-          </DrawerTitle>
-          <button
-            type="button"
-            aria-label="Close"
-            onClick={onClose}
-            className="rounded-full p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-          >
-            <X className="h-5 w-5" />
-          </button>
-        </div>
+        <SheetHeader
+          direction={direction}
+          title={t(
+            mode === 'add'
+              ? ADD_TITLES[section]
+              : draft.isCorporate
+                ? 'keyPeople.sheet.editCompany'
+                : 'keyPeople.sheet.editPerson',
+          )}
+          onClose={sheet.close}
+        />
 
         <div
           className={cn(

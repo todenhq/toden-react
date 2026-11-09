@@ -1,7 +1,6 @@
 'use client';
 
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { createPortal } from 'react-dom';
 import { getCountries, getCountryCallingCode, parsePhoneNumberFromString, type CountryCode } from 'libphonenumber-js/min';
 import { Check, ChevronsUpDown, Search } from './icons';
 import { Input } from './ui/input';
@@ -10,7 +9,7 @@ import { cn } from '../lib/utils';
 import { formatNationalNumber } from '../lib/phone-format';
 import { useDropdownAnchor } from '../lib/use-dropdown-anchor';
 import { eventPathIncludes } from '../lib/event-path';
-import { DropdownSurface } from './DropdownSurface';
+import { PickerSurface, pickerListProps, usePickerSheet } from './PickerSurface';
 import { useText } from '../i18n';
 
 // Phone input with a searchable dial-code country picker + as-you-type
@@ -58,19 +57,27 @@ export interface PhoneNumberInputProps {
    */
   geoCountry?: string | null;
   disabled?: boolean;
+  /**
+   * The dial-code countries on offer (ISO-2), the workflow's choice; absent or
+   * empty offers every country. With one, its code is shown fixed, with no picker.
+   */
+  countries?: readonly string[];
   /** Fires on every edit with the E.164 value ('' until parseable) + validity. */
   onChange: (value: { e164: string; isValid: boolean; country: string }) => void;
 }
 
-export function PhoneNumberInput({ value, defaultCountry, geoCountry, disabled, onChange }: PhoneNumberInputProps) {
+export function PhoneNumberInput({ value, defaultCountry, geoCountry, disabled, countries, onChange }: PhoneNumberInputProps) {
   const t = useText();
-  const options = useMemo<CountryOption[]>(
-    () =>
-      getCountries()
-        .map((code) => ({ code, name: countryName(code), dialCode: `+${getCountryCallingCode(code)}` }))
-        .sort((a, b) => a.name.localeCompare(b.name)),
-    [],
-  );
+  const offered = countries?.length ? countries.map((c) => c.toUpperCase()).sort().join(',') : '';
+  const options = useMemo<CountryOption[]>(() => {
+    const only = offered ? new Set(offered.split(',')) : null;
+    return getCountries()
+      .filter((code) => !only || only.has(code))
+      .map((code) => ({ code, name: countryName(code), dialCode: `+${getCountryCallingCode(code)}` }))
+      .sort((a, b) => a.name.localeCompare(b.name));
+  }, [offered]);
+  // One country on offer: nothing to choose, so its code is shown fixed.
+  const fixed = options.length === 1;
 
   // A supplied number decides its OWN dial code - it is a fact, where the
   // country prop is a guess. Falls through to the guess when there is no number
@@ -78,9 +85,18 @@ export function PhoneNumberInput({ value, defaultCountry, geoCountry, disabled, 
   const supplied = useMemo(() => (value ? parsePhoneNumberFromString(value) : null), [value]);
   const seed = (supplied?.country ?? defaultCountry?.toUpperCase() ?? FALLBACK_COUNTRY) as CountryCode;
 
+  // A seed outside the countries on offer gives way to the first one offered.
+  const onOffer = (code: CountryCode) => options.some((o) => o.code === code);
   const [country, setCountry] = useState<CountryCode>(
-    options.some((o) => o.code === seed) ? seed : FALLBACK_COUNTRY,
+    onOffer(seed) ? seed : onOffer(FALLBACK_COUNTRY) ? FALLBACK_COUNTRY : (options[0]?.code ?? FALLBACK_COUNTRY),
   );
+  // The list can arrive after the field (a workflow resolved late): keep the
+  // chosen code inside it.
+  const firstOffered = options[0]?.code;
+  const outside = !options.some((o) => o.code === country);
+  useEffect(() => {
+    if (outside && firstOffered) setCountry(firstOffered);
+  }, [outside, firstOffered]);
   const [national, setNational] = useState(() =>
     supplied ? formatNationalNumber(supplied.nationalNumber, seed) : '',
   );
@@ -105,6 +121,8 @@ export function PhoneNumberInput({ value, defaultCountry, geoCountry, disabled, 
   const menuRef = useRef<HTMLDivElement>(null);
   const searchRef = useRef<HTMLInputElement>(null);
   const anchor = useDropdownAnchor(open, triggerRef, { menuRef });
+  // A bottom sheet on a phone, as the mobile SDKs open it; a menu otherwise.
+  const sheet = usePickerSheet();
 
   const selected = options.find((o) => o.code === country);
 
@@ -126,10 +144,12 @@ export function PhoneNumberInput({ value, defaultCountry, geoCountry, disabled, 
     emit(code, national); // re-parse the same digits under the new dial code
   };
 
-  // Close on outside click / Escape; focus the search when opened.
+  // Close on outside click / Escape; focus the search when opened. Neither in
+  // the sheet: it takes its own outside taps and drags, and focusing would
+  // raise the keyboard over the list before anyone asked to type.
   useEffect(() => {
     if (!open) return;
-    searchRef.current?.focus();
+    if (!sheet) searchRef.current?.focus();
     const onPointerDown = (e: PointerEvent) => {
       // composedPath, not e.target: the SDK renders in a shadow frame and a
       // document listener sees retargeted events (see lib/event-path.ts). The
@@ -142,13 +162,13 @@ export function PhoneNumberInput({ value, defaultCountry, geoCountry, disabled, 
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') { setOpen(false); setQuery(''); }
     };
-    document.addEventListener('pointerdown', onPointerDown);
+    if (!sheet) document.addEventListener('pointerdown', onPointerDown);
     document.addEventListener('keydown', onKeyDown);
     return () => {
       document.removeEventListener('pointerdown', onPointerDown);
       document.removeEventListener('keydown', onKeyDown);
     };
-  }, [open]);
+  }, [open, sheet]);
 
   const filtered = query.trim()
     ? options.filter((o) => {
@@ -166,6 +186,15 @@ export function PhoneNumberInput({ value, defaultCountry, geoCountry, disabled, 
 
   return (
     <div ref={rootRef} className="relative flex items-stretch gap-2">
+      {fixed ? (
+        <span
+          aria-label={`${selected?.name ?? country} ${selected?.dialCode ?? ''}`}
+          className="flex h-12 shrink-0 items-center gap-1.5 rounded-xl border border-input bg-muted/40 px-3 text-sm font-medium"
+        >
+          <CountryFlag code={country} className="h-5 w-5" title={selected?.name} />
+          <span className="tabular-nums">{selected?.dialCode}</span>
+        </span>
+      ) : (
       <button
         ref={triggerRef}
         type="button"
@@ -183,6 +212,7 @@ export function PhoneNumberInput({ value, defaultCountry, geoCountry, disabled, 
         <span className="tabular-nums">{selected?.dialCode}</span>
         <ChevronsUpDown className="h-4 w-4 shrink-0 opacity-50" aria-hidden />
       </button>
+      )}
 
       <Input
         type="tel"
@@ -194,54 +224,56 @@ export function PhoneNumberInput({ value, defaultCountry, geoCountry, disabled, 
         disabled={disabled}
       />
 
-      {open && anchor.host && createPortal(
-        <DropdownSurface menuRef={menuRef}>
-          <div
-            style={anchor.style}
-            className="z-50 overflow-hidden rounded-xl border border-border bg-popover text-popover-foreground shadow-lg animate-slide-up"
-          >
-            <div className="flex items-center gap-2 border-b border-border px-3">
-              <Search className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden />
-              <input
-                ref={searchRef}
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-                placeholder={t('contact.phone.search')}
-                aria-label="Search countries"
-                className="h-11 w-full bg-transparent text-sm outline-none placeholder:text-muted-foreground"
-              />
-            </div>
-            <div className="overflow-y-auto p-1.5" style={{ maxHeight: anchor.maxHeight }}>
-              {filtered.length === 0 ? (
-                <p className="px-3 py-8 text-center text-sm text-muted-foreground">{t('contact.phone.noMatches')}</p>
-              ) : (
-                <>
-                  {pinned && (
-                    <>
-                      <CountryRow
-                        option={pinned}
-                        selected={pinned.code === country}
-                        badge={t('contact.phone.yourLocation')}
-                        onPick={pick}
-                      />
-                      {rest.length > 0 && <div className="my-1.5 border-t border-border/70" />}
-                    </>
-                  )}
-                  {rest.map((o) => (
+      <PickerSurface
+        sheet={sheet}
+        open={open}
+        onClose={() => {
+          setOpen(false);
+          setQuery('');
+        }}
+        title={t('contact.phone.codeTitle')}
+        menuRef={menuRef}
+        anchor={anchor}
+      >
+          <div className="flex items-center gap-2 border-b border-border px-3">
+            <Search className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden />
+            <input
+              ref={searchRef}
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder={t('contact.phone.search')}
+              aria-label="Search countries"
+              className="h-11 w-full bg-transparent text-sm outline-none placeholder:text-muted-foreground"
+            />
+          </div>
+          <div {...pickerListProps(sheet, anchor.maxHeight, 'p-1.5')}>
+            {filtered.length === 0 ? (
+              <p className="px-3 py-8 text-center text-sm text-muted-foreground">{t('contact.phone.noMatches')}</p>
+            ) : (
+              <>
+                {pinned && (
+                  <>
                     <CountryRow
-                      key={o.code}
-                      option={o}
-                      selected={o.code === country}
+                      option={pinned}
+                      selected={pinned.code === country}
+                      badge={t('contact.phone.yourLocation')}
                       onPick={pick}
                     />
-                  ))}
-                </>
-              )}
-            </div>
+                    {rest.length > 0 && <div className="my-1.5 border-t border-border/70" />}
+                  </>
+                )}
+                {rest.map((o) => (
+                  <CountryRow
+                    key={o.code}
+                    option={o}
+                    selected={o.code === country}
+                    onPick={pick}
+                  />
+                ))}
+              </>
+            )}
           </div>
-        </DropdownSurface>,
-        anchor.host,
-      )}
+      </PickerSurface>
     </div>
   );
 }

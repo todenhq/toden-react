@@ -2,7 +2,7 @@
 
 import React, { createContext, useContext } from 'react';
 import { BookUser, CircleCheck, MapPin, MapPinCheck } from '../../components/icons';
-import { Drawer, DrawerContent, DrawerTitle } from '../../components/ui/drawer';
+import { Drawer, DrawerContent, DrawerTitle, useSheetClose } from '../../components/ui/drawer';
 import { useDesktopPointer } from '../../lib/use-desktop-pointer';
 import { cn } from '../../lib/utils';
 import { AddressBookDialog, AddressBookDialogTitle } from './AddressBookDialog';
@@ -20,6 +20,8 @@ const DialogShape = createContext(false);
  */
 export function AddressBookSheet({ onClose, children }: { onClose: () => void; children: React.ReactNode }) {
   const desktop = useDesktopPointer();
+  // A drag or an outside tap slides the sheet away before the parent removes it.
+  const sheet = useSheetClose(onClose);
   if (desktop) {
     return (
       <DialogShape.Provider value>
@@ -28,8 +30,8 @@ export function AddressBookSheet({ onClose, children }: { onClose: () => void; c
     );
   }
   return (
-    <Drawer open direction="bottom" onOpenChange={(o) => !o && onClose()}>
-      <DrawerContent aria-describedby={undefined} className="max-h-[85vh] rounded-t-3xl">
+    <Drawer direction="bottom" {...sheet.rootProps}>
+      <DrawerContent aria-describedby={undefined} className="max-h-[85vh]">
         <div className="overflow-y-auto px-6 pb-[max(1.5rem,env(safe-area-inset-bottom))] pt-5">{children}</div>
       </DrawerContent>
     </Drawer>

@@ -22,6 +22,10 @@ import { applicantCountryOptions, applicantSelfCountry } from '../lib/business-a
 import type { AnyIdType, AnyCountry, IdTypeDefinition } from '../types/config';
 import { defaultCountry } from '../lib/country-default';
 import { useText } from '../i18n';
+import { countryOnIdStep } from '../lib/id-selection-layout';
+import { isRetiredIdType } from '../lib/retired-id-types';
+import { withoutNinBesideSlip } from '../lib/nin-slip';
+import { IdCountryField } from './IdCountryField';
 
 // Keyed by idType key, so the generic Global-Documents types (passport /
 // drivers-license / national-id) get sensible icons in ANY country; unknown
@@ -90,10 +94,16 @@ export function IdTypeStep({ country, allowedIdTypes }: IdTypeStepProps = {}) {
   // capture step), so drop every document-scanned ID from the picker. This is
   // what makes the disabled "Document Intelligence" step actually disappear from
   // the live flow rather than still offering passports/licenses.
+  // A retired type (BVN Premium, now BVN's premium option) is never offered,
+  // even from the local list used when the server config fails.
+  const offeredTypes = withoutNinBesideSlip(
+    resolvedCountry,
+    grantedVisible.filter((t) => !isRetiredIdType(resolvedCountry, t.key)),
+  );
   const visibleTypes =
     config.enableDocumentCapture === false
-      ? grantedVisible.filter((t) => !t.requiresDocumentCapture)
-      : grantedVisible;
+      ? offeredTypes.filter((t) => !t.requiresDocumentCapture)
+      : offeredTypes;
 
   // Picking an ID type ADVANCES — there is no Continue button. This is a
   // single-select list with nothing else on the step to confirm, so a second
@@ -144,6 +154,15 @@ export function IdTypeStep({ country, allowedIdTypes }: IdTypeStepProps = {}) {
     handleBackToStart();
   };
 
+  // The combined layout picks the country here, above the IDs, rather than on
+  // a step of its own; a KYB applicant who named their country already has one.
+  const countryOptions = applicantCountryOptions(config);
+  const countryHere =
+    countryOnIdStep(config) &&
+    countryOptions.length > 1 &&
+    !(isBusinessFlow(config) && applicantSelfCountry(state.businessApplication)) &&
+    !(plan && plan.index > 0);
+
   const handleBackToStart = () => {
     // Applicant mode (KYB applicant-verification leg): id-type was reached
     // from applicant-role — via country-select when the org's grants offered
@@ -154,10 +173,10 @@ export function IdTypeStep({ country, allowedIdTypes }: IdTypeStepProps = {}) {
       payload: isBusinessFlow(config)
         ? applicantSelfCountry(state.businessApplication)
           ? 'applicant-role'
-          : applicantCountryOptions(config).length > 1
+          : applicantCountryOptions(config).length > 1 && !countryOnIdStep(config)
             ? 'country-select'
             : 'applicant-role'
-        : (config.countries?.length ?? 0) > 1
+        : (config.countries?.length ?? 0) > 1 && !countryOnIdStep(config)
           ? 'country-select'
           : 'consent',
     });
@@ -166,11 +185,14 @@ export function IdTypeStep({ country, allowedIdTypes }: IdTypeStepProps = {}) {
   return (
     <div className="space-y-6 animate-slide-up">
       <StepHeader
-        title={t('selectDocument.idType.title')}
-        description={t('selectDocument.idType.description')}
+        title={t(countryHere ? 'selectDocument.combined.title' : 'selectDocument.idType.title')}
+        description={t(countryHere ? 'selectDocument.combined.description' : 'selectDocument.idType.description')}
         onBack={handleBack}
-        country={resolvedCountry}
+        // The field below names the country; the header need not repeat it.
+        country={countryHere ? undefined : resolvedCountry}
       />
+
+      {countryHere && <IdCountryField options={countryOptions} />}
 
       {serverConfig.status === 'loading' ? (
         <div className="flex flex-col items-center justify-center py-10 text-sm text-muted-foreground">
@@ -214,16 +236,14 @@ export function IdTypeStep({ country, allowedIdTypes }: IdTypeStepProps = {}) {
                     : 'hover:border-muted-foreground/30',
                 )}
               >
-                <div
+                {/* The glyph alone, no tile behind it: the card is the frame. */}
+                <Icon
+                  aria-hidden
                   className={cn(
-                    'flex h-10 w-10 shrink-0 items-center justify-center rounded-lg',
-                    isSelected
-                      ? 'bg-primary/10 text-primary'
-                      : 'bg-secondary text-muted-foreground',
+                    'h-7 w-7 shrink-0 transition-colors',
+                    isSelected ? 'text-primary' : 'text-muted-foreground',
                   )}
-                >
-                  <Icon className="h-5 w-5" />
-                </div>
+                />
                 <span className="flex-1 text-sm font-medium">{idType.label}</span>
               </Card>
             </button>

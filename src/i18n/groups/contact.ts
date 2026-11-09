@@ -60,6 +60,7 @@ export const CONTACT_TEXTS: TextGroup = {
     { key: 'contact.phone.label', label: 'Phone: field label', default: 'Phone number' },
     { key: 'contact.phone.placeholder', label: 'Phone: field placeholder', default: '803 123 4567' },
     { key: 'contact.phone.search', label: 'Phone: country search placeholder', default: 'Search country or code' },
+    { key: 'contact.phone.codeTitle', label: 'Phone: country code sheet title', default: 'Country code' },
     { key: 'contact.phone.noMatches', label: 'Phone: no countries found', default: 'No matches' },
     { key: 'contact.phone.yourLocation', label: 'Phone: your location badge', default: 'Your location' },
     { key: 'contact.channel.question', label: 'Channel picker: label', default: 'How should we send it?' },

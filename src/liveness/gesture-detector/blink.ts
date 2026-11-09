@@ -55,7 +55,7 @@ export function createBlinkState(): BlinkState {
   return { samples: [], sinceClosed: null };
 }
 
-function calculateEAR(
+export function calculateEAR(
   landmarks: NormalizedLandmark[],
   eye: 'left' | 'right',
   aspect: number,

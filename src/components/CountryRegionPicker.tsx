@@ -75,7 +75,10 @@ export function CountryRegionPicker({
         />
       </div>
 
-      <div className="min-h-0 flex-1 space-y-4 overflow-y-auto pr-0.5">
+      {/* Out over the sheet body's p-6 (VerificationModal), so the scrollbar
+          runs down the sheet's edge rather than beside the cards, and the
+          list scrolls to the sheet's bottom instead of stopping above it. */}
+      <div className="-mx-6 -mb-6 min-h-0 flex-1 space-y-4 overflow-y-auto px-6 pb-6">
         {pinned && (
           <button
             type="button"

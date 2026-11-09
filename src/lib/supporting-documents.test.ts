@@ -237,6 +237,9 @@ describe('how a document is provided', () => {
     expect(resolveSupportingDocuments(doc() as never, [])[0]?.capture).toBe('upload');
     expect(resolveSupportingDocuments(doc('draw') as never, [])[0]?.capture).toBe('draw');
     expect(resolveSupportingDocuments(doc('draw_or_upload') as never, [])[0]?.capture).toBe('draw_or_upload');
+    // A photo taken there and then: the card opens the camera.
+    expect(resolveSupportingDocuments(doc('camera') as never, [])[0]?.capture).toBe('camera');
+    expect(resolveSupportingDocuments(doc('file') as never, [])[0]?.capture).toBe('file');
     // A mode a newer workflow adds degrades to the slot this build can draw.
     expect(resolveSupportingDocuments(doc('typed') as never, [])[0]?.capture).toBe('upload');
   });

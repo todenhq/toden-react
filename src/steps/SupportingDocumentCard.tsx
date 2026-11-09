@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useRef, useState } from 'react';
-import { Check, FileText, Loader2, PenLine, Upload, X } from '../components/icons';
+import { Camera, Check, FileText, Loader2, PenLine, Upload, X } from '../components/icons';
 import { SignaturePreview } from '../components/SignaturePreview';
 import { UploadedFileThumb } from '../components/UploadedFilePreview';
 import { useText } from '../i18n';
@@ -26,11 +26,16 @@ interface SupportingDocumentCardProps {
   error: string | null;
   onPick: (file: File) => void;
   onRemove: () => void;
-  /** How it is provided: a file, a signature drawn on screen, or either. */
-  capture: 'upload' | 'draw' | 'draw_or_upload';
+  /** How it is provided: a file or photo (upload), one already on the device
+   *  (file: on the web the same picker, as a page cannot take the camera out
+   *  of a phone's own chooser), a photo taken there and then (camera), a
+   *  signature drawn on screen, or either of the last. */
+  capture: 'upload' | 'draw' | 'draw_or_upload' | 'camera' | 'file';
   /** The provided document was signed on screen. */
   drawn: boolean;
   onSign: (drawing: SignatureDrawing) => void;
+  /** A camera document: open the SDK's own camera (components/PhotoCamera). */
+  onTakePhoto: () => void;
 }
 
 /**
@@ -59,6 +64,7 @@ export function SupportingDocumentCard({
   capture,
   drawn,
   onSign,
+  onTakePhoto,
 }: SupportingDocumentCardProps) {
   const t = useText();
   const inputRef = useRef<HTMLInputElement>(null);
@@ -66,7 +72,11 @@ export function SupportingDocumentCard({
   const errorId = `supporting-doc-error-${position}`;
   // Where the workflow offers both, the pad comes first: it is the shorter way.
   const [uploadInstead, setUploadInstead] = useState(false);
-  const signing = capture !== 'upload' && !uploadInstead;
+  const signing = (capture === 'draw' || capture === 'draw_or_upload') && !uploadInstead;
+  // Camera: the SDK's own camera rather than the file chooser, on a desktop
+  // as on a phone. The step renders it; this card only asks for it.
+  const camera = capture === 'camera';
+  const choose = () => (camera ? onTakePhoto() : inputRef.current?.click());
   // What was signed, kept so it can be shown once saved and reopened by Edit.
   // It lives only as long as this screen: a resumed session shows the pen mark.
   const [signed, setSigned] = useState<SignatureDrawing | null>(null);
@@ -164,7 +174,7 @@ export function SupportingDocumentCard({
               type="button"
               className="flex min-h-11 items-center gap-1 rounded-lg px-2 text-xs font-medium text-primary transition-colors hover:bg-primary/10"
               // Edit reopens the pad with the signature in it; replacing a file opens the picker.
-              onClick={() => (drawn ? onRemove() : inputRef.current?.click())}
+              onClick={() => (drawn ? onRemove() : choose())}
             >
               {drawn && <PenLine className="h-3.5 w-3.5" aria-hidden="true" />}
               {t(drawn ? 'supportingDocuments.signature.redo' : 'supportingDocuments.card.replace')}
@@ -196,12 +206,14 @@ export function SupportingDocumentCard({
           <button
             type="button"
             disabled={uploading}
-            onClick={() => inputRef.current?.click()}
+            onClick={choose}
             aria-describedby={error ? errorId : undefined}
             className="flex min-h-11 w-full items-center gap-3 rounded-xl border-2 border-dashed border-border px-3 py-3 text-left transition-colors hover:border-primary/50 hover:bg-background/60 disabled:opacity-60"
           >
             {uploading ? (
               <Loader2 className="h-5 w-5 shrink-0 animate-spin text-primary" aria-hidden="true" />
+            ) : camera ? (
+              <Camera className="h-5 w-5 shrink-0 text-muted-foreground" aria-hidden="true" />
             ) : (
               <Upload className="h-5 w-5 shrink-0 text-muted-foreground" aria-hidden="true" />
             )}
@@ -209,9 +221,13 @@ export function SupportingDocumentCard({
               <span className="block text-sm font-medium">
                 {uploading
                   ? t('supportingDocuments.card.uploading')
-                  : t('supportingDocuments.card.upload', { document: label.toLowerCase() })}
+                  : t(camera ? 'supportingDocuments.card.capture' : 'supportingDocuments.card.upload', {
+                      document: label.toLowerCase(),
+                    })}
               </span>
-              <span className="block text-[11px] text-muted-foreground">{t('supportingDocuments.card.uploadHint')}</span>
+              <span className="block text-[11px] text-muted-foreground">
+                {t(camera ? 'supportingDocuments.card.captureHint' : 'supportingDocuments.card.uploadHint')}
+              </span>
             </span>
           </button>
         )}

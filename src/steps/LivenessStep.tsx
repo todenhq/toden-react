@@ -600,13 +600,15 @@ export function LivenessStep() {
           onBack={handleBack}
         />
 
-        <div className="relative mx-auto w-56 sm:w-64 overflow-hidden rounded-full border-4 border-primary/20">
+        {/* Passport-shaped, as the selfie is cut (lib/selfie-pick.ts): 3:4,
+            head and shoulders. */}
+        <div className="relative mx-auto w-44 sm:w-52 overflow-hidden rounded-2xl border-4 border-primary/20">
           {preview ? (
-            <img src={preview} alt="Selfie preview" className="aspect-square w-full object-cover" />
+            <img src={preview} alt="Selfie preview" className="aspect-[3/4] w-full object-cover" />
           ) : (
             // Restored session: the bytes are gone by design (only the mediaId
             // travels), so show a completed state rather than a broken image.
-            <div className="flex aspect-square w-full flex-col items-center justify-center gap-2 bg-muted/40">
+            <div className="flex aspect-[3/4] w-full flex-col items-center justify-center gap-2 bg-muted/40">
               <span className="flex h-14 w-14 items-center justify-center rounded-full bg-primary/15">
                 <Check className="h-7 w-7 text-primary" />
               </span>

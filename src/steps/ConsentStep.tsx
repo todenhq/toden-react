@@ -2,7 +2,7 @@
 
 import { configScope, isFaceScope, isScopedBusiness } from '../lib/scope';
 import React from 'react';
-import { ShieldCheck, Lock, RotateCcw } from '../components/icons';
+import { Lock, RotateCcw } from '../components/icons';
 import { Button } from '../components/ui/button';
 import { useVerificationContext } from '../context/VerificationContext';
 import { useVerificationConfig } from '../context/VerificationConfigContext';
@@ -13,8 +13,10 @@ import { resubmitNote } from '../lib/resubmit';
 import { documentCaptureNeedsCamera } from '../lib/document-capture-methods';
 import { hasApplicantVerification } from '../lib/business-application';
 import { MobileHandoffSheet } from '../components/MobileHandoffSheet';
-import { consentDescription, consentProcessSteps, consentTitle } from './consent-copy';
+import { consentDescription, consentMinutes, consentProcessSteps, consentTitle } from './consent-copy';
 import { ConsentLegalNotice } from './ConsentLegalNotice';
+import { ConsentJourney } from './ConsentJourney';
+import { ConsentEmblem } from './ConsentEmblem';
 
 export function ConsentStep() {
   const { dispatch } = useVerificationContext();
@@ -33,7 +35,6 @@ export function ConsentStep() {
     { ...copyCase, firstName: config.userData?.firstName, legacy: config.consent?.title },
     t,
   );
-  const description = consentDescription({ ...copyCase, legacy: config.consent?.description }, t);
 
   const handleContinue = () => {
     // Contact-verification steps (when enabled) come first — a cheap
@@ -59,6 +60,10 @@ export function ConsentStep() {
     capturesFace || (!isBusiness && !scope && documentCaptureNeedsCamera(config));
 
   const steps = consentProcessSteps(config, copyCase, t);
+  const description = consentDescription(
+    { ...copyCase, legacy: config.consent?.description, minutes: consentMinutes(steps) },
+    t,
+  );
 
   // A reviewer sent this applicant back. Say so, and say why — the note is the
   // only thing on screen that explains a flow which has silently lost most of
@@ -66,7 +71,7 @@ export function ConsentStep() {
   const redoNote = resubmitNote(config.resubmit);
 
   return (
-    <div className="space-y-7 animate-slide-up">
+    <div className="space-y-6 animate-slide-up">
       {redoNote && (
         <div className="flex gap-3 rounded-2xl border border-amber-500/40 bg-amber-500/10 p-4 text-left">
           <RotateCcw className="mt-0.5 h-4 w-4 shrink-0 text-amber-600 dark:text-amber-400" />
@@ -78,51 +83,30 @@ export function ConsentStep() {
           </div>
         </div>
       )}
-      <div className="flex flex-col items-center text-center space-y-4">
-        <div className="relative flex h-20 w-20 items-center justify-center">
-          <span className="absolute inset-0 rounded-full bg-primary/10 animate-pulse-ring" />
-          <span className="absolute inset-2 rounded-full bg-primary/15" />
-          <div className="relative flex h-14 w-14 items-center justify-center rounded-full bg-primary shadow-lg shadow-primary/30">
-            <ShieldCheck className="h-7 w-7 text-primary-foreground" />
-          </div>
-        </div>
-        <div className="space-y-1.5">
-          <h2 className="text-2xl font-semibold leading-tight font-heading">
-            {title}
-          </h2>
-          <p className="text-sm text-muted-foreground max-w-sm mx-auto leading-relaxed">
-            {description}
-          </p>
+      <div className="flex flex-col items-center space-y-4 text-center">
+        <ConsentEmblem />
+        <div className="space-y-2">
+          <h2 className="font-heading text-2xl font-semibold leading-tight tracking-tight">{title}</h2>
+          <p className="mx-auto max-w-sm text-sm leading-relaxed text-muted-foreground">{description}</p>
         </div>
       </div>
 
-      <div className="rounded-2xl bg-secondary/40 p-5">
-        <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-          {t('welcome.process.heading')}
-        </p>
-        <ul className="mt-4 space-y-3.5">
-          {steps.map(({ icon: Icon, label }) => (
-            <li key={label} className="flex items-center gap-3">
-              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
-                <Icon className="h-4.5 w-4.5" />
-              </span>
-              <span className="text-sm font-medium text-foreground/90">{label}</span>
-            </li>
-          ))}
-        </ul>
-      </div>
+      <ConsentJourney steps={steps} heading={t('welcome.process.heading')} />
 
       <div className="space-y-3">
         {/* The notice sits IMMEDIATELY above the button it describes: consent is
-            now given by acting, so the disclosure has to be adjacent to the act
-            for that consent to be informed. */}
-        <ConsentLegalNotice isBusiness={isBusiness || scopedBusiness} capturesFace={capturesFace} recordsVideo={recordsVideo} />
+            given by acting, so the disclosure has to be adjacent to the act for
+            that consent to be informed. The notice names this button
+            ("By tapping Continue"), so its label stays Continue. */}
+        <div className="rounded-xl bg-muted/50 px-3.5 pt-3">
+          <ConsentLegalNotice isBusiness={isBusiness || scopedBusiness} capturesFace={capturesFace} recordsVideo={recordsVideo} />
+        </div>
 
         <Button onClick={handleContinue} className="w-full">
           {t('common.continue')}
         </Button>
         <p className="flex items-center justify-center gap-1.5 text-xs text-muted-foreground">
-          <Lock className="h-3 w-3" />
+          <Lock className="h-3 w-3" aria-hidden />
           {t('welcome.secureNote')}
         </p>
         {/* No camera in the business flow — nothing to hand off to a phone for. */}

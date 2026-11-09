@@ -243,8 +243,14 @@ export function SubmittedStep({ stepOrder = [] }: { stepOrder?: readonly Verific
 					// mediaId in state, and the submission then omitted both fields — so
 					// the media was never claimed (swept on its TTL), the PoA check never
 					// ran and the component never billed, from the web SDK only.
-					...(state.mediaIds.proofOfAddress
-						? { proofOfAddressType: state.poaDocumentType ?? 'other' }
+					// The kind the applicant picked (the server recognises the document
+					// within it). The document's country is its own: the applicant may
+					// not live in the country that issued their ID.
+					...(state.mediaIds.proofOfAddress && state.poaDocumentType
+						? { proofOfAddressType: state.poaDocumentType }
+						: {}),
+					...(state.mediaIds.proofOfAddress && state.poaCountry
+						? { proofOfAddressCountry: state.poaCountry }
 						: {}),
 					// Smart-address submission (Address Intelligence): the pin, the
 					// details and, when attestPresence took one, the device fix.

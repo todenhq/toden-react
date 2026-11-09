@@ -1,23 +1,31 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
-import { poaCountryDeclared, poaOfferedCountries } from './poa-country-gate';
+import { poaCountryOf, poaOfferedCountries } from './poa-country-gate';
 
-// The Proof of Address step's Continue holds until the address scope's country
-// is declared (user decision 2026-09-08). Mirrored on RN and Flutter.
-describe('poaCountryDeclared', () => {
-  it('outside the address scope the flow country stands', () => {
-    expect(poaCountryDeclared({ scope: null, selectedCountry: null, offered: [] })).toBe(true);
-    expect(poaCountryDeclared({ scope: 'contact', selectedCountry: null, offered: [] })).toBe(true);
+// The Proof of Address step's country (user decisions 2026-09-08 and
+// 2026-11-07). Mirrored on RN and Flutter.
+describe('poaCountryOf', () => {
+  const world = ['NG', 'GH', 'GB'];
+  const facts = { scope: null, selectedCountry: null, poaCountry: null, idCountry: null, offered: world };
+
+  it('starts from the ID country outside the address scope, and a pick replaces it', () => {
+    expect(poaCountryOf({ ...facts, selectedCountry: 'NG', idCountry: 'NG' })).toBe('NG');
+    expect(poaCountryOf({ ...facts, selectedCountry: 'NG', idCountry: 'NG', poaCountry: 'GB' })).toBe('GB');
   });
 
-  it('on the address scope a picked country declares it', () => {
-    expect(poaCountryDeclared({ scope: 'address', selectedCountry: 'NG', offered: ['NG', 'GH'] })).toBe(true);
-    expect(poaCountryDeclared({ scope: 'address', selectedCountry: null, offered: ['NG', 'GH'] })).toBe(false);
-    expect(poaCountryDeclared({ scope: 'address', selectedCountry: ' ', offered: ['NG', 'GH'] })).toBe(false);
+  it('does not start from an ID country the org does not accept', () => {
+    expect(poaCountryOf({ ...facts, idCountry: 'KE' })).toBeNull();
+  });
+
+  it('on the address scope only the declared country counts', () => {
+    expect(poaCountryOf({ ...facts, scope: 'address', selectedCountry: 'gh' })).toBe('GH');
+    expect(poaCountryOf({ ...facts, scope: 'address', idCountry: 'NG', poaCountry: 'NG' })).toBeNull();
+    expect(poaCountryOf({ ...facts, scope: 'address', selectedCountry: ' ' })).toBeNull();
   });
 
   it('one accepted country is a settled fact, not a choice', () => {
-    expect(poaCountryDeclared({ scope: 'address', selectedCountry: null, offered: ['NG'] })).toBe(true);
+    expect(poaCountryOf({ ...facts, scope: 'address', offered: ['NG'] })).toBe('NG');
+    expect(poaCountryOf({ ...facts, offered: ['NG'] })).toBe('NG');
   });
 
   it('the offered list is the org list, unknown codes dropped, else the world', () => {
@@ -27,7 +35,7 @@ describe('poaCountryDeclared', () => {
 
   it('the PoA step gates Continue on it', () => {
     const src = readFileSync(new URL('../steps/ProofOfAddressStep.tsx', import.meta.url).pathname, 'utf8');
-    expect(src).toContain('poaCountryDeclared(');
-    expect(src).toMatch(/disabled=\{!uploaded \|\| uploading \|\| !countryDeclared\}/);
+    expect(src).toContain('poaCountryOf(');
+    expect(src).toMatch(/disabled=\{!uploaded \|\| uploading \|\| !poaCountry\}/);
   });
 });

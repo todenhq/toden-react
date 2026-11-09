@@ -1,8 +1,7 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
-import { X } from '../../components/icons';
-import { Drawer, DrawerContent, DrawerTitle } from '../../components/ui/drawer';
+import { Drawer, DrawerContent, SheetHeader } from '../../components/ui/drawer';
 import { Button } from '../../components/ui/button';
 import { cn } from '../../lib/utils';
 import { AddressDirectionsField } from '../../components/AddressDirectionsField';
@@ -67,7 +66,6 @@ export function DetailsSheet({
     return () => mq.removeEventListener('change', apply);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-  if (!open) return null;
 
   const modes = addressFieldModes(addressConfig);
   const on = (key: AddressFieldKey) => modes[key] !== 'off';
@@ -80,24 +78,16 @@ export function DetailsSheet({
     typed ?? part?.trim() ?? '';
 
   return (
-    <Drawer open direction={direction} onOpenChange={(o) => !o && onClose()}>
+    // Mounted while the step is, only switched open and closed, so the close
+    // button, Done, a drag and an outside tap all slide it away.
+    <Drawer open={open} direction={direction} onOpenChange={(o) => !o && onClose()}>
       <DrawerContent direction={direction}>
-        <div className={cn('px-4 sm:px-6', direction === 'right' ? 'pt-5' : 'pt-3')}>
-          <div className="flex items-center justify-between">
-            <DrawerTitle className="text-base font-bold">{t('address.details.title')}</DrawerTitle>
-            <button
-              type="button"
-              aria-label="Close"
-              onClick={onClose}
-              className="rounded-full p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-            >
-              <X className="h-5 w-5" />
-            </button>
-          </div>
-          <p className="mt-0.5 text-xs text-muted-foreground">
-            {t(anyRequired ? 'address.details.hint.required' : 'address.details.hint')}
-          </p>
-        </div>
+        <SheetHeader
+          direction={direction}
+          title={t('address.details.title')}
+          description={t(anyRequired ? 'address.details.hint.required' : 'address.details.hint')}
+          onClose={onClose}
+        />
 
         <div
           className={cn(

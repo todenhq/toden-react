@@ -1,7 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import {
+  DOCUMENT_GUIDE_MAX_HEIGHT_FRACTION,
+  DOCUMENT_GUIDE_TOP_SHIFT,
   DOCUMENT_GUIDE_WIDTH_FRACTION,
-  UPRIGHT_GUIDE_BAND_MARGIN,
   documentCropRect,
   documentGuideRect,
 } from './document-guide';
@@ -146,13 +147,13 @@ describe('documentGuideRect for an upright slip', () => {
   // A NIN slip turned upright on a phone (lib/document-turn.ts).
   const UPRIGHT = 1 / 2.07;
   const VIEW = { width: 390, height: 844 };
-  // Badges end at 100 px; the hint and shutter start at 648 px.
-  const BAND = { top: 100, bottom: 648 };
+  // The free band, its clear space from the top bar and the bottom row included.
+  const BAND = { top: 112, bottom: 636 };
 
-  it('fits the free band between the controls, less the margin', () => {
+  it('fills the free band between the controls', () => {
     const guide = documentGuideRect(VIEW, UPRIGHT, BAND);
-    expect(guide.y).toBeCloseTo(BAND.top + UPRIGHT_GUIDE_BAND_MARGIN, 5);
-    expect(guide.y + guide.height).toBeCloseTo(BAND.bottom - UPRIGHT_GUIDE_BAND_MARGIN, 5);
+    expect(guide.y).toBeCloseTo(BAND.top, 5);
+    expect(guide.y + guide.height).toBeCloseTo(BAND.bottom, 5);
     expect(guide.width / guide.height).toBeCloseTo(UPRIGHT, 5);
     expect(guide.x).toBeCloseTo((VIEW.width - guide.width) / 2, 5);
   });
@@ -169,13 +170,26 @@ describe('documentGuideRect for an upright slip', () => {
     expect(guide.width / guide.height).toBeCloseTo(UPRIGHT, 5);
   });
 
-  it('leaves a landscape guide exactly as it was, band or not', () => {
-    expect(documentGuideRect(VIEW, 2.07, BAND)).toEqual(documentGuideRect(VIEW, 2.07));
-    expect(documentGuideRect(VIEW, CARD, BAND)).toEqual(documentGuideRect(VIEW, CARD));
+  it('leaves the inline (band-less) landscape guide nudged up and height-capped', () => {
+    const inline = { width: 640, height: 360 };
+    for (const aspect of [2.07, CARD, 1.42]) {
+      const guide = documentGuideRect(inline, aspect);
+      expect(guide.height).toBeLessThanOrEqual(inline.height * DOCUMENT_GUIDE_MAX_HEIGHT_FRACTION + 1e-9);
+      expect(guide.y).toBeCloseTo((inline.height - guide.height) / 2 - DOCUMENT_GUIDE_TOP_SHIFT, 9);
+    }
+  });
+
+  it('centres a landscape guide given a band, uncapped, as React Native does', () => {
+    for (const aspect of [2.07, CARD, 1.42]) {
+      const guide = documentGuideRect(VIEW, aspect, BAND);
+      expect(guide.width).toBeCloseTo(VIEW.width * DOCUMENT_GUIDE_WIDTH_FRACTION, 9);
+      expect(guide.height).toBeCloseTo(guide.width / aspect, 9);
+      expect(guide.y + guide.height / 2).toBeCloseTo(VIEW.height / 2, 9);
+    }
   });
 
   it('falls back to the width-led guide without a band, or with an empty one', () => {
-    expect(documentGuideRect(VIEW, UPRIGHT, { top: 500, bottom: 505 })).toEqual(documentGuideRect(VIEW, UPRIGHT));
+    expect(documentGuideRect(VIEW, UPRIGHT, { top: 500, bottom: 500 })).toEqual(documentGuideRect(VIEW, UPRIGHT));
     const guide = documentGuideRect(VIEW, UPRIGHT);
     expect(guide.height).toBeLessThanOrEqual(VIEW.height);
   });

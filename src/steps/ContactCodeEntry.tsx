@@ -6,6 +6,7 @@ import { Label } from '../components/ui/label';
 import { Copy } from '../components/icons';
 import { otpCodeFrom, pastedCode } from '../lib/otp-code';
 import { InputOTP, InputOTPGroup, InputOTPSlot } from '../components/ui/input-otp';
+import { REGEXP_ONLY_DIGITS } from 'input-otp';
 import type { OtpInputStyle } from '../types/config';
 import { useText } from '../i18n';
 
@@ -60,7 +61,9 @@ export function ContactCodeEntry({ code, onChange, codeLength, style, disabled, 
             id="contact-code"
             maxLength={codeLength}
             value={code}
-            pattern="^\\d*$"
+            // The library's own constant: a JSX string does not process escapes,
+            // so "^\\d*$" written here was a literal backslash and rejected every digit typed.
+            pattern={REGEXP_ONLY_DIGITS}
             pasteTransformer={(text) => otpCodeFrom(text, '', codeLength)}
             onChange={(next) => {
               setNoCode(false);

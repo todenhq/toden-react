@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useImperativeHandle, useRef, useState } from 'react';
 import { Camera, CircleCheck, Loader2, RefreshCcw, X } from './icons';
 import { useText } from '../i18n';
 
@@ -17,15 +17,32 @@ export function isAcceptedAddressPhoto(file: File): boolean {
   return PHOTO_MIMES.includes((file.type.split(';')[0] || '').toLowerCase());
 }
 
+/** What the step's photo camera reaches in here: the file chooser, and a photo it took. */
+export interface AddressPhotoControls {
+  chooseFile: () => void;
+  pick: (file: File) => void;
+}
+
 interface AddressPhotoUploadProps {
   required: boolean;
   uploaded: boolean;
   uploading: boolean;
   onPick: (file: File) => void;
   onRemove: () => void;
+  /** Opens the SDK's own camera (components/PhotoCamera), which the step renders. */
+  onTakePhoto: () => void;
+  controlRef?: React.Ref<AddressPhotoControls>;
 }
 
-export function AddressPhotoUpload({ required, uploaded, uploading, onPick, onRemove }: AddressPhotoUploadProps) {
+export function AddressPhotoUpload({
+  required,
+  uploaded,
+  uploading,
+  onPick,
+  onRemove,
+  onTakePhoto,
+  controlRef,
+}: AddressPhotoUploadProps) {
   const t = useText();
   const inputRef = useRef<HTMLInputElement>(null);
   const [preview, setPreview] = useState<string | null>(null);
@@ -44,6 +61,8 @@ export function AddressPhotoUpload({ required, uploaded, uploading, onPick, onRe
     }
     onPick(file);
   };
+
+  useImperativeHandle(controlRef, () => ({ chooseFile: () => inputRef.current?.click(), pick }));
 
   const overlayPill =
     'inline-flex items-center gap-1.5 rounded-full bg-background/90 px-3 py-1.5 text-xs font-medium shadow backdrop-blur-sm transition-colors hover:bg-background';
@@ -77,7 +96,7 @@ export function AddressPhotoUpload({ required, uploaded, uploading, onPick, onRe
             <CircleCheck className="h-3 w-3" /> {t('address.photo.badge')}
           </span>
           <div className="absolute bottom-3 right-3 flex gap-2">
-            <button type="button" onClick={() => inputRef.current?.click()} className={overlayPill}>
+            <button type="button" onClick={onTakePhoto} className={overlayPill}>
               <RefreshCcw className="h-3.5 w-3.5" /> {t('address.photo.replace')}
             </button>
             <button
@@ -100,7 +119,7 @@ export function AddressPhotoUpload({ required, uploaded, uploading, onPick, onRe
         <button
           type="button"
           disabled={uploading}
-          onClick={() => inputRef.current?.click()}
+          onClick={onTakePhoto}
           className="group flex min-h-[300px] w-full flex-col items-center justify-center gap-3 rounded-2xl border-2 border-dashed border-border px-6 py-8 text-center transition-colors hover:border-primary/60 hover:bg-primary/5 disabled:opacity-70 sm:min-h-[340px]"
         >
           <span className="flex h-14 w-14 items-center justify-center rounded-2xl bg-primary/10 text-primary ring-1 ring-primary/20 transition-transform group-hover:scale-105">

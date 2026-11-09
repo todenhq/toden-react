@@ -26,11 +26,11 @@ export function useObjectUrl(file: File | null): string | null {
   return url;
 }
 
-function isPdf(file: File): boolean {
+export function isPdf(file: File): boolean {
   return (file.type.split(';')[0] || '').toLowerCase() === 'application/pdf';
 }
 
-function FileViewerOverlay({
+export function FileViewerOverlay({
   url,
   pdf,
   label,

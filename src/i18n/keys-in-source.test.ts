@@ -25,6 +25,7 @@ const CONFIG_PATHS = new Set([
   'keyPeople.ownershipThreshold',
   'keyPeople.removedFromRegistry',
   'keyPeople.roles',
+  'proofOfAddress.capture',
   'proofOfAddress.countries',
 ]);
 

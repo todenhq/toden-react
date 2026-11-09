@@ -121,6 +121,7 @@ export function HostedFlow({
         country={(leg.country ?? snap.business?.country) as AnyCountry}
         countries={leg.countries as Array<{ country: AnyCountry; idTypes?: AnyIdType[] }> | undefined}
         idTypes={leg.idTypes as AnyIdType[] | undefined}
+        idSelectionLayout={leg.idSelectionLayout}
         // Deliberately from `snap`, not `leg`: multi-ID is KYC-only and the
         // applicant-leg overlay never carries it (one person, one check).
         multiId={snap.multiId}

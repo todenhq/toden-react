@@ -38,6 +38,7 @@ import {
   HelpCircleIcon as HugeHelpCircleIcon,
   House as HugeHouse,
   IdentityCardIcon as HugeIdentityCardIcon,
+  Image01Icon as HugeImage01Icon,
   ImageUp as HugeImageUp,
   Mic01Icon as HugeMic01Icon,
   Info as HugeInfo,
@@ -60,6 +61,7 @@ import {
   RadarIcon as HugeRadarIcon,
   ReceiptTextIcon as HugeReceiptTextIcon,
   RefreshCcw as HugeRefreshCcw,
+  RefreshCw as HugeRefreshCw,
   ScanFace as HugeScanFace,
   ScanLine as HugeScanLine,
   SearchIcon as HugeSearchIcon,
@@ -131,6 +133,7 @@ export const FolderOpen = createAppIcon(HugeFolderOpenIcon, 'FolderOpen');
 export const CircleHelp = createAppIcon(HugeHelpCircleIcon, 'CircleHelp');
 export const House = createAppIcon(HugeHouse, 'House');
 export const IdCard = createAppIcon(HugeIdentityCardIcon, 'IdCard');
+export const Image = createAppIcon(HugeImage01Icon, 'Image');
 export const ImageUp = createAppIcon(HugeImageUp, 'ImageUp');
 export const Mic = createAppIcon(HugeMic01Icon, 'Mic');
 export const Info = createAppIcon(HugeInfo, 'Info');
@@ -170,6 +173,7 @@ export const Plus = createAppIcon(HugePlus, 'Plus');
 export const Radar = createAppIcon(HugeRadarIcon, 'Radar');
 export const ReceiptText = createAppIcon(HugeReceiptTextIcon, 'ReceiptText');
 export const RefreshCcw = createAppIcon(HugeRefreshCcw, 'RefreshCcw');
+export const RefreshCw = createAppIcon(HugeRefreshCw, 'RefreshCw');
 // Lucide's `RotateCcw` is a circular arrow. Hugeicons' alias of that name
 // resolves to `RotateLeft01Icon`, which is a HAND rotating an object — so
 // every Retake and retry control drew a hand. It takes the same drawing as

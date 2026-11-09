@@ -29,6 +29,7 @@ import {
 } from '../lib/business-application';
 import type { ApplicantRole } from '../types/business';
 import { useText } from '../i18n';
+import { countryOnIdStep } from '../lib/id-selection-layout';
 
 const ROLES = Object.keys(APPLICANT_ROLE_LABELS) as ApplicantRole[];
 
@@ -285,7 +286,7 @@ export function ApplicantRoleStep() {
           dispatch({
             type: 'SET_STEP',
             payload:
-              applicantCountryOptions(config).length > 1 ? 'country-select' : 'id-type',
+              applicantCountryOptions(config).length > 1 && !countryOnIdStep(config) ? 'country-select' : 'id-type',
           });
         }}
         disabled={!canContinue}

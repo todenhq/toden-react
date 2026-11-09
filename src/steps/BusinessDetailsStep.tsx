@@ -5,7 +5,7 @@ import { Building2, Info, Loader2, Pencil } from '../components/icons';
 import { StepHeader } from '../components/StepHeader';
 import { Button } from '../components/ui/button';
 import { Label } from '../components/ui/label';
-import { BusinessCountrySelect } from '../components/BusinessCountrySelect';
+import { CountrySummarySelect } from '../components/CountrySummarySelect';
 import { BusinessSearch } from '../components/BusinessSearch';
 import { BusinessRegionField, useBusinessRegions } from '../components/BusinessRegionField';
 import { businessPickView, nameSearchOffered, pickedBusinessName } from '../lib/business-search';
@@ -336,27 +336,31 @@ export function BusinessDetailsStep() {
       />
 
       {showCountryPicker && (
-        <div className="space-y-2">
-          <Label htmlFor="businessCountry">{t('business.details.countryLabel')}</Label>
-          <BusinessCountrySelect
-            id="businessCountry"
-            countries={offeredCountries}
-            value={country}
-            // Frozen once the register has answered, when the workflow says so.
-            // Off by default: a mis-click from ~48 registers is ordinary, and a
-            // lock turns it into a dead end. The server does not rely on this -
-            // a changed company is re-checked and re-charged regardless.
-            disabled={registerLocked}
-            // Where they appear to be, lifted to the top of ~48 registers. A
-            // guess, tagged as one, and the register they pick is what counts.
-            defaultCode={config.serverConfig?.geoCountry ?? undefined}
-            pinnedLabel={t('business.details.countryPinnedLocation')}
-            onChange={(value) =>
-              // A country switch can invalidate the picked product — reset it.
-              setDetails({ country: value, product: null })
-            }
-          />
-        </div>
+        // The summary row the PoA and ID steps use (CountrySummarySelect).
+        <CountrySummarySelect
+          countries={offeredCountries}
+          value={country || null}
+          label={t('business.details.countryCaption')}
+          // Frozen once the register has answered, when the workflow says so.
+          // Off by default: a mis-click from ~48 registers is ordinary, and a
+          // lock turns it into a dead end. The server does not rely on this -
+          // a changed company is re-checked and re-charged regardless.
+          disabled={registerLocked}
+          // Where they appear to be, pinned in the list. A guess, tagged as
+          // one, and the register they pick is what counts.
+          geoCountry={config.serverConfig?.geoCountry ?? null}
+          // A country switch can invalidate the picked product — reset it.
+          onPick={(value) => setDetails({ country: value, product: null })}
+          copy={{
+            placeholder: t('business.country.placeholder'),
+            change: t('business.country.change'),
+            choose: t('business.country.choose'),
+            search: t('business.country.searchPlaceholder'),
+            noMatches: t('business.country.noMatch'),
+            selected: t('business.country.selected'),
+            yourLocation: t('business.details.countryPinnedLocation'),
+          }}
+        />
       )}
 
       {showPicker && (

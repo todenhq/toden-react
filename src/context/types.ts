@@ -353,6 +353,11 @@ export interface VerificationState {
   // Step 4c — proof of address (mediaId lives in mediaIds.proofOfAddress)
   poaDocumentType: PoaDocumentType | null;
   poaFileName: string | null;
+  /** The country the proof of address is from, picked on that step. Not the
+   *  ID's country (`selectedCountry`): people live outside the country that
+   *  issued their ID. Null until picked; the address scope uses
+   *  `selectedCountry`, its declaration, instead. */
+  poaCountry: string | null;
 
   // Step 4d — Address Intelligence (smart-address capture). The photo's
   // mediaId lives in mediaIds.addressPhoto; the pin + directions + the
@@ -515,7 +520,8 @@ export type VerificationAction =
   // Questionnaire
   | { type: 'SET_QUESTIONNAIRE_ANSWER'; payload: { key: string; value: QuestionnaireAnswerValue | undefined } }
   // Proof of Address
-  | { type: 'SET_POA_DOCUMENT'; payload: { documentType: PoaDocumentType; fileName: string } }
+  | { type: 'SET_POA_DOCUMENT'; payload: { documentType?: PoaDocumentType | null; fileName: string } }
+  | { type: 'SET_POA_COUNTRY'; payload: string }
   | { type: 'CLEAR_POA_DOCUMENT' }
   | { type: 'SET_ADDRESS'; payload: NonNullable<VerificationState['address']> }
   | { type: 'SET_ADDRESS_PHOTO_PREVIEW'; payload: string | null }

@@ -1,10 +1,14 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { StepHeader } from '../../components/StepHeader';
 import { Button } from '../../components/ui/button';
 import { StickyActions } from '../../components/StickyActions';
-import { AddressPhotoUpload } from '../../components/AddressPhotoUpload';
+import { AddressPhotoUpload, type AddressPhotoControls } from '../../components/AddressPhotoUpload';
+import { PhotoCamera } from '../../components/PhotoCamera';
+import { usePhotoCamera } from '../../hooks/usePhotoCamera';
+import { PHOTO_COPY, photoFileName } from '../../lib/photo-mode';
+import { cn } from '../../lib/utils';
 import { useVerificationContext } from '../../context/VerificationContext';
 import { useAddressFlow } from './use-address-flow';
 import { StreetViewFramer } from './StreetViewFramer';
@@ -40,6 +44,10 @@ export function AddressEntranceStep() {
   const [mode, setMode] = useState<'framing' | 'photo'>(() => (streetView ? 'framing' : 'photo'));
   const [skipped, setSkipped] = useState(false);
   const photoUploaded = Boolean(state.mediaIds.addressPhoto);
+  // "Take or upload a photo": the SDK's own camera, whose Upload is the
+  // photo input's own chooser.
+  const camera = usePhotoCamera();
+  const photo = useRef<AddressPhotoControls>(null);
 
   // Nothing to capture here (no coverage AND the photo input is off): move on
   // rather than showing an empty screen.
@@ -53,7 +61,18 @@ export function AddressEntranceStep() {
   const canContinue = !flow.uploading && (flow.photoMode !== 'required' || photoUploaded);
 
   return (
-    <div className="space-y-4 animate-slide-up">
+    <>
+    {camera.open && (
+      <PhotoCamera
+        title={PHOTO_COPY.entranceTitle}
+        instruction={PHOTO_COPY.fitEntrance}
+        fileName={photoFileName(PHOTO_COPY.entranceTitle)}
+        onPhoto={(file) => photo.current?.pick(file)}
+        onDismiss={camera.dismiss}
+        onUpload={() => photo.current?.chooseFile()}
+      />
+    )}
+    <div className={cn('space-y-4 animate-slide-up', camera.open && 'hidden')}>
       <StepHeader
         title={t('address.entrance.title')}
         description={t(
@@ -142,6 +161,8 @@ export function AddressEntranceStep() {
             uploading={flow.uploading}
             onPick={(file) => void flow.pickPhoto(file)}
             onRemove={flow.removePhoto}
+            onTakePhoto={() => camera.show(null)}
+            controlRef={photo}
           />
 
           {flow.error && <p className="text-sm text-destructive">{flow.error}</p>}
@@ -158,5 +179,6 @@ export function AddressEntranceStep() {
         </>
       )}
     </div>
+    </>
   );
 }

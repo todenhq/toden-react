@@ -49,6 +49,17 @@ export const SUPPORTING_DOCUMENTS_TEXTS: TextGroup = {
     },
     { key: 'supportingDocuments.card.uploading', label: 'Uploading', default: 'Uploading…' },
     {
+      key: 'supportingDocuments.card.capture',
+      label: 'Camera button',
+      default: 'Take a photo of {document}',
+      placeholders: ['document'],
+    },
+    {
+      key: 'supportingDocuments.card.captureHint',
+      label: 'Camera hint',
+      default: 'Your camera opens so you can photograph it.',
+    },
+    {
       key: 'supportingDocuments.card.uploadHint',
       label: 'Upload hint',
       default: UPLOAD_HINT,

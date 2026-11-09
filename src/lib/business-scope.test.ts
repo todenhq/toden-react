@@ -143,7 +143,7 @@ describe('business wording on scoped screens', () => {
     const labels = consentProcessSteps(config, { isBusiness: false, scope: 'address', scopedBusiness: true }, t).map(
       (s) => s.label,
     );
-    expect(labels).toContain('Pin your business premises on a map');
+    expect(labels).toContain('Verify your business premises');
     expect(labels).toContain("Upload a document showing your business's address");
     expect(labels).not.toContain('Collect your business registration details');
   });

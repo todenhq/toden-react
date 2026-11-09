@@ -140,6 +140,32 @@ export type PoaDocumentType =
  */
 export type PoaNameRule = 'required' | 'optional' | 'off';
 
+/** The documents inside each kind (lib/poa-subtypes.ts); add-only. */
+export type PoaDocumentSubtype =
+  | 'electricity_bill'
+  | 'water_bill'
+  | 'gas_bill'
+  | 'internet_bill'
+  | 'phone_bill'
+  | 'waste_bill'
+  | 'bank_statement'
+  | 'credit_card_statement'
+  | 'mortgage_statement'
+  | 'loan_statement'
+  | 'tenancy_agreement'
+  | 'lease_agreement'
+  | 'property_title'
+  | 'tax_document'
+  | 'property_rates_bill'
+  | 'voter_registration'
+  | 'voter_id'
+  | 'benefits_letter'
+  | 'government_letter'
+  | 'insurance_document'
+  | 'employer_letter'
+  | 'education_letter'
+  | 'other_document';
+
 export interface ProofOfAddressConfig {
   /** Adds the Proof of Address step (after capture, before the questionnaire). */
   enabled?: boolean;
@@ -151,10 +177,20 @@ export interface ProofOfAddressConfig {
   /** Per-country narrowing of the accepted kinds (ISO-2 key). A present entry
    *  REPLACES `documentTypes` for that country; absent = the global set. */
   countryDocuments?: Record<string, PoaDocumentType[]>;
+  /** The documents accepted inside the kinds. A kind none of these belong to
+   *  accepts all of its own (lib/poa-subtypes.ts); absent = all. */
+  documentSubtypes?: PoaDocumentSubtype[];
+  /** Days a recognised document stays valid, over its kind's window. The
+   *  server applies it; the SDK states the kind's window. */
+  documentSubtypeValidity?: Partial<Record<PoaDocumentSubtype, number>>;
   /** Custom label shown for the 'other' document kind (absent = "Other document"). */
   otherLabel?: string;
   /** Recency window the server checks the document date against (default 90). */
   maxAgeDays?: number;
+  /** How the applicant provides the document (absent = both). */
+  capture?: 'both' | 'camera' | 'file';
+  /** Per-kind recency window in days, over `maxAgeDays` (0 = no limit). */
+  documentValidity?: Partial<Record<PoaDocumentType, number>>;
   /** The default name rule for every country and kind (absent = required). */
   nameMatch?: PoaNameRule;
   /** Per-country, per-kind exceptions to `nameMatch` (ISO-2 → kind → rule). */
@@ -203,7 +239,7 @@ export interface SupportingDocumentRequest {
    * How it is provided: a file (`upload`, the default), a signature drawn on
    * screen (`draw`), or either (`draw_or_upload`).
    */
-  capture?: 'upload' | 'draw' | 'draw_or_upload';
+  capture?: 'upload' | 'draw' | 'draw_or_upload' | 'camera' | 'file';
 }
 
 export interface SupportingDocumentsConfig {
@@ -342,6 +378,8 @@ export interface PhoneVerificationConfig {
   channels?: Array<'sms' | 'whatsapp'>;
   /** Default dial-code country for the phone input (falls back to the flow's country). */
   defaultCountry?: string;
+  /** The dial-code countries the phone input offers (ISO-2; absent = all). One country is shown fixed, with no picker. */
+  countries?: string[];
 }
 
 // ---------------------------------------------------------------------------
@@ -640,6 +678,13 @@ export interface VerificationConfig<C extends AnyCountry = AnyCountry> {
 
   /** Subset of ID types to offer. Only types valid for the given country are accepted. */
   idTypes?: IdTypeForCountry<C>[];
+
+  /**
+   * On a multi-country flow, where the country is picked: a dropdown on the
+   * ID-type step (`combined`, the default) or a country step of its own
+   * (`separate`). See lib/id-selection-layout.ts.
+   */
+  idSelectionLayout?: import('../lib/id-selection-layout').IdSelectionLayout;
 
   /**
    * Multi-ID verification: the applicant verifies `count` IDs in one run, with

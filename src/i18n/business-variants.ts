@@ -34,6 +34,7 @@ export const BUSINESS_VARIANT_BASES: Readonly<Record<string, string>> = {
   'questionnaire.description.business': 'questionnaire.description',
   'proofOfAddress.description.business': 'proofOfAddress.description',
   'proofOfAddress.description.noName.business': 'proofOfAddress.description.noName',
+  'proofOfAddress.country.residence.business': 'proofOfAddress.country.residence',
   'result.success.description.address.business': 'result.success.description.address',
   'result.success.description.questionnaire.business': 'result.success.description.questionnaire',
   'result.success.description.contact.business': 'result.success.description.contact',

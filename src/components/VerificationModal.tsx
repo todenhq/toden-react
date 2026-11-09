@@ -71,6 +71,7 @@ import { PreviewCapturePlaceholder } from '../steps/PreviewCapturePlaceholder';
 import { SubmittedStep } from '../steps/SubmittedStep';
 import { CompletedStep } from '../steps/CompletedStep';
 import { ModalSurfaceContext } from '../lib/modal-surface';
+import { countryOnIdStep } from '../lib/id-selection-layout';
 
 interface VerificationModalProps {
   open: boolean;
@@ -148,7 +149,13 @@ function CurrentStep({
     case 'phone-verification':
       return <ContactVerificationStep key="contact-phone" channel="phone" />;
     case 'country-select':
-      return <CountrySelectStep />;
+      // Reached on a combined layout only from older state (a resumed run):
+      // the ID-type step carries the country there.
+      return countryOnIdStep(config) ? (
+        <IdTypeStep country={config.country} allowedIdTypes={plan ? plan.safeOptions : config.idTypes} />
+      ) : (
+        <CountrySelectStep />
+      );
     case 'id-type':
       return <IdTypeStep country={config.country} allowedIdTypes={plan ? plan.safeOptions : config.idTypes} />;
     case 'document-capture':
@@ -231,7 +238,8 @@ export function VerificationModal({ open, onClose, showThemeToggle, disableClose
   const isBusiness = isBusinessFlow(config);
   const selectedDef = state.selectedIdType ? config.getIdTypeDefinition(state.selectedIdType) : null;
   const hasDocCapture = selectedDef ? selectedDef.requiresDocumentCapture : true;
-  const hasCountrySelect = (config.countries?.length ?? 0) > 1;
+  // A combined layout picks the country on the ID-type step, so no step of its own.
+  const hasCountrySelect = (config.countries?.length ?? 0) > 1 && !countryOnIdStep(config);
   const livenessFeatures = state.selectedIdType
     ? config.getIdTypeFeatures(config.country, state.selectedIdType)
     : null;

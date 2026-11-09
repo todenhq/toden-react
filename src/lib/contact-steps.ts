@@ -8,6 +8,7 @@ import type {
 } from '../types/config';
 import { stepAfterCapture } from './post-capture';
 import { configScope, isFaceScope } from './scope';
+import { countryOnIdStep } from './id-selection-layout';
 
 // Contact-verification step presence + navigation helpers. The steps sit
 // right after consent (a cheap pre-filter before document/liveness spend),
@@ -25,6 +26,7 @@ interface ContactStepConfig {
   emailVerification?: EmailVerificationConfig;
   phoneVerification?: PhoneVerificationConfig;
   countries?: Array<{ country: string }>;
+  idSelectionLayout?: import('./id-selection-layout').IdSelectionLayout;
   subjectTypeIsBusiness: boolean;
   // Scoped flows skip the identity section entirely; the fields below ride
   // along from the call sites' full-config spread so stepAfterCapture can
@@ -52,7 +54,20 @@ function stepAfterContactSection(config: ContactStepConfig): VerificationStep {
   // documents there, so the step can never be part of this chain.
   if (scope === 'address') return stepAfterCapture(config, []);
   const multiRegion = (config.countries?.length ?? 0) > 1;
-  return multiRegion ? 'country-select' : 'id-type';
+  return multiRegion && !countryOnIdStep(config) ? 'country-select' : 'id-type';
+}
+
+/**
+ * Where Back on a contact step lands: the phone step backs into the email step
+ * when the flow has one, and the first contact step into consent. A flow
+ * without the consent screen opens on its first contact step, which then has
+ * no Back at all (StepHeader hides it on the opening step).
+ */
+export function stepBeforeContact(
+  config: { emailVerification?: EmailVerificationConfig },
+  channel: 'email' | 'phone',
+): VerificationStep {
+  return channel === 'phone' && hasEmailVerificationStep(config.emailVerification) ? 'email-verification' : 'consent';
 }
 
 /** The LAST step of the consent/contact section — where the first step after

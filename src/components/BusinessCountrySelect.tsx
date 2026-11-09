@@ -1,7 +1,6 @@
 'use client';
 
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { createPortal } from 'react-dom';
 import { Check, ChevronsUpDown, Search } from './icons';
 import { CountryFlag } from './CountryFlag';
 import { cn } from '../lib/utils';
@@ -9,7 +8,7 @@ import { businessCountryName, groupBusinessCountries } from '../lib/business';
 import { groupCountriesByRegion } from '../lib/regions';
 import { useDropdownAnchor } from '../lib/use-dropdown-anchor';
 import { eventPathIncludes } from '../lib/event-path';
-import { DropdownSurface } from './DropdownSurface';
+import { PickerSurface, pickerListProps, usePickerSheet } from './PickerSurface';
 import { useText } from '../i18n';
 
 /**
@@ -67,6 +66,8 @@ export function BusinessCountrySelect({
   const searchRef = useRef<HTMLInputElement>(null);
   // Full-width field, so the menu matches the control it hangs off.
   const anchor = useDropdownAnchor(open, triggerRef, { width: 'trigger', menuRef });
+  // A bottom sheet on a phone, as the mobile SDKs open it; a menu otherwise.
+  const sheet = usePickerSheet();
 
   // Pinned only while it is one of the countries on offer, and only while it
   // still matches what is being searched for: a pin that ignores the search box
@@ -97,10 +98,12 @@ export function BusinessCountrySelect({
     return groupBusinessCountries(rest, t);
   }, [countries, query, groupAll, pinned, t]);
 
-  // Close on outside click / Escape; focus the search box when opened.
+  // Close on outside click / Escape; focus the search box when opened. Neither
+  // in the sheet: it takes its own outside taps and drags, and focusing would
+  // raise the keyboard over the list before anyone asked to type.
   useEffect(() => {
     if (!open) return;
-    searchRef.current?.focus();
+    if (!sheet) searchRef.current?.focus();
     const onPointerDown = (e: PointerEvent) => {
       // composedPath, not e.target: the SDK renders in a shadow frame and a
       // document listener sees retargeted events (see lib/event-path.ts). The
@@ -116,13 +119,13 @@ export function BusinessCountrySelect({
         setQuery('');
       }
     };
-    document.addEventListener('pointerdown', onPointerDown);
+    if (!sheet) document.addEventListener('pointerdown', onPointerDown);
     document.addEventListener('keydown', onKeyDown);
     return () => {
       document.removeEventListener('pointerdown', onPointerDown);
       document.removeEventListener('keydown', onKeyDown);
     };
-  }, [open]);
+  }, [open, sheet]);
 
   const pick = (code: string) => {
     onChange(code);
@@ -155,90 +158,92 @@ export function BusinessCountrySelect({
         {!disabled && <ChevronsUpDown className="h-4 w-4 shrink-0 opacity-50" aria-hidden />}
       </button>
 
-      {open && anchor.host && createPortal(
-        <DropdownSurface menuRef={menuRef}>
-          <div
-            style={anchor.style}
-            className="z-50 overflow-hidden rounded-xl border border-border bg-popover text-popover-foreground shadow-lg animate-slide-up"
-          >
-            <div className="flex items-center gap-2 border-b border-border px-3">
-              <Search className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden />
-              <input
-                ref={searchRef}
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-                placeholder={t('business.country.searchPlaceholder')}
-                aria-label="Search countries"
-                className="h-11 w-full bg-transparent text-base outline-none placeholder:text-muted-foreground sm:text-sm"
-              />
-            </div>
-            <div className="overflow-y-auto p-1.5" style={{ maxHeight: anchor.maxHeight }}>
-              {pinned && (
-                <div className="mb-1 border-b border-border pb-1.5">
-                  <button
-                    type="button"
-                    onClick={() => pick(pinned)}
-                    className={cn(
-                      'flex min-h-11 w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-base transition-colors sm:text-sm',
-                      'hover:bg-accent focus-visible:bg-accent focus-visible:outline-none',
-                      pinned === value && 'bg-primary/5 font-medium',
-                    )}
-                  >
-                    <CountryFlag
-                      code={pinned}
-                      className="h-5 w-5"
-                      title={businessCountryName(pinned)}
-                    />
-                    <span className="truncate">{businessCountryName(pinned)}</span>
-                    {/* Says WHY this one is at the top, which "Suggested" would
-                        not: it is either the country the field arrived holding,
-                        or where the visitor appears to be. */}
-                    <span className="shrink-0 rounded-full bg-muted px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-                      {pinnedLabel ?? t('business.country.pinnedDefault')}
-                    </span>
-                    {pinned === value && (
-                      <Check className="ml-auto h-4 w-4 shrink-0 text-primary" aria-hidden />
-                    )}
-                  </button>
-                </div>
-              )}
-              {groups.length === 0 && !pinned ? (
-                <p className="px-3 py-8 text-center text-sm text-muted-foreground">
-                  {t('business.country.noMatch')}
-                </p>
-              ) : (
-                groups.map((group) => (
-                  <div key={group.label} className="mb-1 last:mb-0">
-                    <p className="px-2.5 pb-1 pt-2 text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">
-                      {group.label}
-                    </p>
-                    {group.countries.map((c) => {
-                      const isSelected = c.code === value;
-                      return (
-                        <button
-                          key={c.code}
-                          type="button"
-                          onClick={() => pick(c.code)}
-                          className={cn(
-                            'flex min-h-11 w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-base transition-colors sm:text-sm',
-                            'hover:bg-accent focus-visible:bg-accent focus-visible:outline-none',
-                            isSelected && 'bg-primary/5 font-medium',
-                          )}
-                        >
-                          <CountryFlag code={c.code} className="h-5 w-5" title={c.name} />
-                          <span className="flex-1 truncate">{c.name}</span>
-                          {isSelected && <Check className="h-4 w-4 shrink-0 text-primary" aria-hidden />}
-                        </button>
-                      );
-                    })}
-                  </div>
-                ))
-              )}
-            </div>
+      <PickerSurface
+        sheet={sheet}
+        open={open}
+        onClose={() => {
+          setOpen(false);
+          setQuery('');
+        }}
+        title={t('business.details.countryLabel')}
+        menuRef={menuRef}
+        anchor={anchor}
+      >
+          <div className="flex items-center gap-2 border-b border-border px-3">
+            <Search className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden />
+            <input
+              ref={searchRef}
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder={t('business.country.searchPlaceholder')}
+              aria-label="Search countries"
+              className="h-11 w-full bg-transparent text-base outline-none placeholder:text-muted-foreground sm:text-sm"
+            />
           </div>
-        </DropdownSurface>,
-        anchor.host,
-      )}
+          <div {...pickerListProps(sheet, anchor.maxHeight, 'p-1.5')}>
+            {pinned && (
+              <div className="mb-1 border-b border-border pb-1.5">
+                <button
+                  type="button"
+                  onClick={() => pick(pinned)}
+                  className={cn(
+                    'flex min-h-11 w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-base transition-colors sm:text-sm',
+                    'hover:bg-accent focus-visible:bg-accent focus-visible:outline-none',
+                    pinned === value && 'bg-primary/5 font-medium',
+                  )}
+                >
+                  <CountryFlag
+                    code={pinned}
+                    className="h-5 w-5"
+                    title={businessCountryName(pinned)}
+                  />
+                  <span className="truncate">{businessCountryName(pinned)}</span>
+                  {/* Says WHY this one is at the top, which "Suggested" would
+                      not: it is either the country the field arrived holding,
+                      or where the visitor appears to be. */}
+                  <span className="shrink-0 rounded-full bg-muted px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                    {pinnedLabel ?? t('business.country.pinnedDefault')}
+                  </span>
+                  {pinned === value && (
+                    <Check className="ml-auto h-4 w-4 shrink-0 text-primary" aria-hidden />
+                  )}
+                </button>
+              </div>
+            )}
+            {groups.length === 0 && !pinned ? (
+              <p className="px-3 py-8 text-center text-sm text-muted-foreground">
+                {t('business.country.noMatch')}
+              </p>
+            ) : (
+              groups.map((group) => (
+                <div key={group.label} className="mb-1 last:mb-0">
+                  <p className="px-2.5 pb-1 pt-2 text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">
+                    {group.label}
+                  </p>
+                  {group.countries.map((c) => {
+                    const isSelected = c.code === value;
+                    return (
+                      <button
+                        key={c.code}
+                        type="button"
+                        onClick={() => pick(c.code)}
+                        className={cn(
+                          'flex min-h-11 w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-base transition-colors sm:text-sm',
+                          'hover:bg-accent focus-visible:bg-accent focus-visible:outline-none',
+                          isSelected && 'bg-primary/5 font-medium',
+                        )}
+                      >
+                        <CountryFlag code={c.code} className="h-5 w-5" title={c.name} />
+                        <span className="flex-1 truncate">{c.name}</span>
+                        {isSelected && <Check className="h-4 w-4 shrink-0 text-primary" aria-hidden />}
+                      </button>
+                    );
+                  })}
+                </div>
+              ))
+            )}
+          </div>
+      </PickerSurface>
     </div>
   );
 }

@@ -2,7 +2,7 @@
 
 React component library for Toden — drop-in identity verification (ID capture, document scan, and active liveness) that talks to the Toden API.
 
-> **New names.** The entry points were renamed in 3.8.0 (`Verification`, `useVerification`, `VerificationError`). The earlier names (`MyazaKYC`, `useMyazaKYC`, `KYCError` and the rest) still work, so an existing integration needs no change. The package name is unchanged.
+> **Entry points.** Use `Verification`, `useVerification` and `VerificationError`. The names from before 3.8.0 still work, so an existing integration needs no change.
 
 ## Installation
 
@@ -156,8 +156,8 @@ base URL) from the API key prefix, which is the single source of truth:
 
 | Key prefix | Environment | Base URL |
 |---|---|---|
-| `pk_test_…` / `sk_test_…` | sandbox | `https://trust.myaza.app` |
-| `pk_live_…` / `sk_live_…` | production | `https://trust.myaza.app` |
+| `pk_test_…` / `sk_test_…` | sandbox | `https://sandbox-api.toden.co` |
+| `pk_live_…` / `sk_live_…` | production | `https://api.toden.co` |
 
 An unrecognized or malformed key throws at setup (it never silently defaults).
 
@@ -473,4 +473,4 @@ all: each side is uploaded as a photo, so only liveness can show this screen.
 
 ## Documentation
 
-Full documentation, configuration options, and webhook setup: **[trust.myaza.co/documentation/sdks](https://trust.myaza.co/documentation/sdks)**.
+Full documentation, configuration options, and webhook setup: **[docs.toden.co/integrate/sdks/react](https://docs.toden.co/integrate/sdks/react)**.

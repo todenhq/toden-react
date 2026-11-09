@@ -8,34 +8,32 @@ import { displayFileName } from '../../lib/display-file-name';
 import { cn } from '../../lib/utils';
 
 /**
- * A neighbouring group's card, tucked behind the open one like the next card on
- * a vertical carousel: inset and muted, with only one edge showing. The next
- * group sits above (its top showing, not a control: a group still ahead cannot
- * be opened yet) and the previous group below (its bottom showing, a button, so
- * the applicant can go back and change it). The open card overlaps the hidden
- * edge, so each card keeps extra padding on that side.
+ * A neighbouring card, tucked behind the open one like the next card on a
+ * vertical carousel: inset and muted, with only one edge showing. The next
+ * card sits above (its top showing, not a control: one still ahead cannot be
+ * opened yet) and the previous below (its bottom showing, a button, so the
+ * applicant can go back and change it). The open card overlaps the hidden
+ * edge, so each card keeps extra padding on that side. Shared by the business
+ * documents' groups and the supporting documents.
  */
-export function GroupRow({
-  group,
+export function TuckedRow({
+  title,
   number,
-  fileName,
+  done,
+  detail,
   onOpen,
 }: {
-  group: BusinessDocumentGroup;
+  title: string;
   number: number;
-  /** The file the group holds; null when it has none. */
-  fileName: string | null;
-  /** Present for the previous group only. */
+  /** It holds something: shows the tick on its number. */
+  done: boolean;
+  /** The line under the title: what it asks for, or what it holds. */
+  detail: string;
+  /** Present for the previous card only. */
   onOpen?: () => void;
 }) {
   const t = useText();
   const previous = onOpen !== undefined;
-  const done = fileName !== null;
-  const detail = previous
-    ? done
-      ? (displayFileName(fileName) ?? t('business.documents.uploaded'))
-      : t('business.documents.skipped')
-    : group.types.map((x) => x.label).join(', ');
 
   const body = (
     <>
@@ -52,7 +50,7 @@ export function GroupRow({
       </span>
       <span className="min-w-0 flex-1">
         <span className="flex items-center gap-2">
-          <span className="truncate text-sm font-medium text-foreground/80">{group.title}</span>
+          <span className="truncate text-sm font-medium text-foreground/80">{title}</span>
           {!previous && (
             <span className="shrink-0 rounded-full bg-background px-2 py-0.5 text-[11px] font-medium text-muted-foreground">
               {t('business.documents.status.next')}
@@ -71,7 +69,7 @@ export function GroupRow({
       <button
         type="button"
         onClick={onOpen}
-        aria-label={`${group.title}. ${detail}. ${t('business.documents.change')}`}
+        aria-label={`${title}. ${detail}. ${t('business.documents.change')}`}
         className={cn(
           card,
           '-mt-3 rounded-b-xl border-t-0 pb-2.5 pt-5 text-left transition-colors duration-150 hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 motion-reduce:transition-none',
@@ -89,12 +87,37 @@ export function GroupRow({
   return (
     <div
       role="note"
-      aria-label={`${t('business.documents.status.next')}: ${group.title}. ${detail}`}
+      aria-label={`${t('business.documents.status.next')}: ${title}. ${detail}`}
       className={cn(card, '-mb-3 rounded-t-xl border-b-0 pb-5 pt-2.5')}
     >
       {body}
     </div>
   );
+}
+
+/** A business document group as a tucked card (see TuckedRow). */
+export function GroupRow({
+  group,
+  number,
+  fileName,
+  onOpen,
+}: {
+  group: BusinessDocumentGroup;
+  number: number;
+  /** The file the group holds; null when it has none. */
+  fileName: string | null;
+  /** Present for the previous group only. */
+  onOpen?: () => void;
+}) {
+  const t = useText();
+  const done = fileName !== null;
+  const detail =
+    onOpen !== undefined
+      ? done
+        ? (displayFileName(fileName) ?? t('business.documents.uploaded'))
+        : t('business.documents.skipped')
+      : group.types.map((x) => x.label).join(', ');
+  return <TuckedRow title={group.title} number={number} done={done} detail={detail} onOpen={onOpen} />;
 }
 
 /** A thin edge of a card further back, so the carousel shows there is more. */

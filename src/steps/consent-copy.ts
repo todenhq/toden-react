@@ -7,7 +7,6 @@ import {
   BadgeCheck,
   Building2,
   FileText,
-  UserRound,
   UsersRound,
   ScanLine,
   ScanFace,
@@ -33,6 +32,44 @@ import type { VerificationConfigValue } from '../context/VerificationConfigConte
 export interface ProcessStep {
   icon: React.ComponentType<{ className?: string }>;
   label: string;
+  /** About how long the step takes a person, for the screen's time estimate. */
+  seconds: number;
+}
+
+/**
+ * About how long each step takes, in seconds: typing a number is quick, a
+ * document scan or a selfie is a minute or under, gathering a company's people
+ * or papers is longer. Estimates for the "About N min" line, not measurements;
+ * a step not listed counts as half a minute.
+ */
+const STEP_SECONDS: Record<string, number> = {
+  'welcome.process.verifyId': 30,
+  'welcome.process.captureDocument': 60,
+  'welcome.process.uploadDocument': 45,
+  'welcome.process.selfie': 45,
+  'welcome.process.faceSelfie': 45,
+  'welcome.process.faceMatch': 10,
+  'welcome.process.faceEnrol': 10,
+  'welcome.process.addressPin': 45,
+  'welcome.process.addressDetails': 30,
+  'welcome.process.addressMap': 45,
+  'welcome.process.proofOfAddress': 60,
+  'welcome.process.supportingDocuments': 60,
+  'welcome.process.questions': 60,
+  'welcome.process.contactScope': 60,
+  'welcome.process.contactEmail': 45,
+  'welcome.process.contactPhone': 45,
+  'welcome.process.contactEmailAndPhone': 90,
+  'welcome.process.businessDetails': 90,
+  'welcome.process.businessRegistry': 20,
+  'welcome.process.keyPeople': 120,
+  'welcome.process.businessDocuments': 120,
+  'welcome.process.applicant': 150,
+};
+
+/** PURE. The whole flow's time, in whole minutes rounded up, at least one. */
+export function consentMinutes(steps: readonly ProcessStep[]): number {
+  return Math.max(1, Math.ceil(steps.reduce((sum, s) => sum + s.seconds, 0) / 60));
 }
 
 /** Scope → the key suffix its title and description use. */
@@ -74,10 +111,22 @@ export function consentTitle(
   return t(key, undefined, c.legacy);
 }
 
-/** The description. An older `consent.description` wins over every variant. */
-export function consentDescription(c: CopyCase & { legacy?: string | null }, t: TextFn = defaultText): string {
+/**
+ * The description, then how long the flow takes ("It takes about 3
+ * minutes."), a sentence of its own: the description is customisable and
+ * customisable texts carry no values. The face and contact screens already
+ * say how long they take, so they get no second sentence. An older
+ * `consent.description` wins over every variant.
+ */
+export function consentDescription(
+  c: CopyCase & { legacy?: string | null; minutes?: number },
+  t: TextFn = defaultText,
+): string {
   const v = variant(c);
-  return t(v ? `welcome.description.${v}` : 'welcome.description', undefined, c.legacy);
+  const text = t(v ? `welcome.description.${v}` : 'welcome.description', undefined, c.legacy);
+  if (c.minutes === undefined || /^(faceCheck|faceEnrolment|contact)/.test(v ?? '')) return text;
+  const time = c.minutes <= 1 ? t('welcome.time.minute') : t('welcome.time.minutes', { minutes: c.minutes });
+  return `${text} ${time}`;
 }
 
 /**
@@ -89,6 +138,7 @@ export function consentProcessSteps(config: VerificationConfigValue, c: CopyCase
   const step = (icon: ProcessStep['icon'], key: string): ProcessStep => ({
     icon,
     label: t(businessKey(key, scopedBusiness)),
+    seconds: STEP_SECONDS[key] ?? 30,
   });
   // The address scope's bullets are NOT a fixed pair: it verifies an address by
   // the pin, by a document, or by both, so promising a map on a flow that only
@@ -116,7 +166,7 @@ export function consentProcessSteps(config: VerificationConfigValue, c: CopyCase
     ? [step(Building2, 'welcome.process.businessDetails'), step(BadgeCheck, 'welcome.process.businessRegistry')]
     : scope
       ? scopeSteps()
-      : [step(BadgeCheck, 'welcome.process.verifyId'), step(UserRound, 'welcome.process.personalInfo')];
+      : [];
   // On the CONTACT scope the catalogue bullet already says this: appending the
   // generic line showed "confirm your contact details" twice.
   const hasEmail = hasEmailVerificationStep(config.emailVerification);
@@ -132,6 +182,8 @@ export function consentProcessSteps(config: VerificationConfigValue, c: CopyCase
         : step(ImageUp, 'welcome.process.uploadDocument'),
     );
   }
+  // The ID is checked once it is in hand: after the scan, before the selfie.
+  if (!isBusiness && !scope) steps.push(step(BadgeCheck, 'welcome.process.verifyId'));
   if (!isBusiness && !scope && config.enableSelfie !== false) {
     steps.push(step(ScanFace, 'welcome.process.selfie'));
   }

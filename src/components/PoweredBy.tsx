@@ -1,8 +1,9 @@
 import { useState } from 'react';
-import { PRODUCT_NAME, PRODUCT_URL, brandMarkColor, brandMarkIsLight } from '../lib/brand';
+import { PRODUCT_NAME, PRODUCT_URL, brandMarkIsLight } from '../lib/brand';
 import { useOptionalVerificationConfig } from '../context/VerificationConfigContext';
 import { TODEN_ACCENT, TODEN_ACCENT_ON_DARK, TodenWordmark } from './TodenWordmark';
 import { useIsDark } from '../lib/use-is-dark';
+import { useTodenMarkColours } from '../lib/use-toden-mark-colours';
 import { effectiveTrustAttribution } from '../lib/trust-attribution';
 import type { SdkTrustAttribution } from '../services/api';
 import { useText } from '../i18n';
@@ -46,24 +47,11 @@ export function PoweredBy() {
   const config = useOptionalVerificationConfig();
   const isDark = useIsDark();
 
-  // The background the mark will ACTUALLY sit on — which is not simply
-  // `appearance.backgroundColor`. Two things that got this wrong:
-  //
-  //  1. the dark palette lives in `appearance.dark`, so on a dark flow the base
-  //     value is the LIGHT background; resolving against it picked the ink tone
-  //     and the mark disappeared into the dark surface;
-  //  2. `appearance.theme` is only the INITIAL theme — the user can toggle — so
-  //     the live class is the authority, not the config.
-  //
-  // Not read from CSS because contrast cannot be computed in a stylesheet, and
-  // this has to hold for an arbitrary org background, not just light vs dark.
-  const appearance = config?.appearance;
-  const background = isDark
-    ? (appearance?.dark?.backgroundColor ?? appearance?.backgroundColor ?? '#080A12')
-    : (appearance?.backgroundColor ?? '#FFFFFF');
-  // ONE colour for the label and the logo's ink. Split colours made it read as
-  // two things sitting next to each other rather than one line.
-  const markColor = brandMarkColor(background);
+  // ONE colour for the label and the logo's ink, chosen for contrast against
+  // the background the mark actually sits on (lib/use-toden-mark-colours.ts,
+  // which the consent screen's mark shares). Split colours made it read as two
+  // things sitting next to each other rather than one line.
+  const { ink: markColor } = useTodenMarkColours();
 
   // Compact on a phone: the footer sat 28px below the lockup on a surface
   // where every row costs the map or the button above it. The bottom keeps

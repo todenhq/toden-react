@@ -34,7 +34,7 @@ const disclosure = (config: {
 /** Mirrors the document bullet in ConsentStep's process list. */
 const documentBullet = (config: { allowDocumentScan?: boolean; allowDocumentUpload?: boolean }) =>
   documentCaptureMethods(config).scan
-    ? 'Capture a photo of your ID document'
+    ? 'Scan your ID document'
     : 'Upload a photo of your ID document';
 
 describe('what the consent notice claims', () => {
@@ -74,8 +74,8 @@ describe('what the consent notice claims', () => {
   });
 
   it('names an upload, not a capture, when documents are upload only', () => {
-    expect(documentBullet({})).toBe('Capture a photo of your ID document');
-    expect(documentBullet({ allowDocumentUpload: false })).toBe('Capture a photo of your ID document');
+    expect(documentBullet({})).toBe('Scan your ID document');
+    expect(documentBullet({ allowDocumentUpload: false })).toBe('Scan your ID document');
     expect(documentBullet({ allowDocumentScan: false })).toBe('Upload a photo of your ID document');
   });
 

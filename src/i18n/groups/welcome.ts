@@ -29,23 +29,20 @@ export const WELCOME_TEXTS: TextGroup = {
     {
       key: 'welcome.description',
       label: 'Description',
-      default:
-        'We need to verify your identity to comply with regulatory requirements. This process is quick and secure.',
+      default: "We're required to confirm who you are, and we'll guide you at every step.",
       multiline: true,
       configPath: ['consent', 'description'],
     },
     {
       key: 'welcome.description.business',
       label: 'Description: business',
-      default:
-        'We need to verify your business to comply with regulatory requirements. This process is quick and secure.',
+      default: "We're required to confirm your business, and we'll guide you at every step.",
       multiline: true,
     },
     {
       key: 'welcome.description.address',
       label: 'Description: address check',
-      default:
-        'We need to confirm your home address to comply with regulatory requirements. This process is quick and secure.',
+      default: "We're required to confirm your home address, and we'll guide you at every step.",
       multiline: true,
     },
     {
@@ -64,8 +61,7 @@ export const WELCOME_TEXTS: TextGroup = {
     {
       key: 'welcome.description.questionnaire',
       label: 'Description: questions',
-      default:
-        'A few questions keep your account details up to date and help us comply with regulatory requirements.',
+      default: 'A few questions keep your account details up to date.',
       multiline: true,
     },
     {
@@ -78,15 +74,13 @@ export const WELCOME_TEXTS: TextGroup = {
     {
       key: 'welcome.description.address.business',
       label: 'Description: business address check',
-      default:
-        'We need to confirm where your business operates to comply with regulatory requirements. This process is quick and secure.',
+      default: "We're required to confirm where your business operates, and we'll guide you at every step.",
       multiline: true,
     },
     {
       key: 'welcome.description.questionnaire.business',
       label: 'Description: business questions',
-      default:
-        'A few questions keep your business details up to date and help us comply with regulatory requirements.',
+      default: 'A few questions keep your business details up to date.',
       multiline: true,
     },
     {

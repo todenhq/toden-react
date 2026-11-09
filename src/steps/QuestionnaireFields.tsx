@@ -128,7 +128,8 @@ export function QuestionField({
           placeholder={field.placeholder} maxDecimals={null} onChange={onChange} />
       )}
       {field.type === 'money' && (
-        <div className="flex gap-2">
+        // Top-aligned so the amount's error line grows under the amount alone.
+        <div className="flex items-start gap-2">
           {currencies.length > 1 ? (
             <div className="w-32 shrink-0">
               <UiSelect
@@ -148,19 +149,23 @@ export function QuestionField({
               {currency ?? '—'}
             </span>
           )}
-          <div className="flex-1">
+          <div className="flex-1 space-y-2">
             <AmountInput inputId={inputId} value={value as number | undefined}
               placeholder={field.placeholder ?? t('questionnaire.amountPlaceholder')}
               maxDecimals={2} onChange={onChange} />
+            {/* On the amount, the part that is missing: under the whole row
+                it sat beneath the currency and read as the currency's error. */}
+            {error && <p className="text-xs text-destructive">{error}</p>}
           </div>
         </div>
       )}
       {field.type === 'date' && (
-        <DateField inputId={inputId} value={value as string | undefined} placeholder={field.placeholder} onChange={onChange} />
+        <DateField inputId={inputId} title={field.label} value={value as string | undefined} placeholder={field.placeholder} onChange={onChange} />
       )}
       {field.type === 'select' && (
         <UiSelect
           id={inputId}
+          title={field.label}
           value={(value as string) || undefined}
           placeholder={field.placeholder ?? t('questionnaire.selectPlaceholder')}
           options={(field.options ?? []).map((opt) => ({ value: opt.value, label: opt.label }))}
@@ -242,7 +247,7 @@ export function QuestionField({
       )}
 
       {field.helpText && <p className="text-xs text-muted-foreground">{field.helpText}</p>}
-      {error && <p className="text-xs text-destructive">{error}</p>}
+      {error && field.type !== 'money' && <p className="text-xs text-destructive">{error}</p>}
     </div>
   );
 }

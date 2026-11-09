@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import { StepHeader } from '../components/StepHeader';
 import { supportingDocumentsIntro } from './supporting-documents-intro';
 import { Button } from '../components/ui/button';
@@ -15,6 +15,12 @@ import { stepBeforeSupportingDocuments } from '../lib/supporting-documents-nav';
 import { useText } from '../i18n';
 import { VerificationApiError } from '../services/api';
 import { hasSignature, type SignatureDrawing } from '../lib/signature';
+import { displayFileName } from '../lib/display-file-name';
+import { cn } from '../lib/utils';
+import { GroupEdge, TuckedRow } from './business-documents/GroupRow';
+import { PhotoCamera } from '../components/PhotoCamera';
+import { usePhotoCamera } from '../hooks/usePhotoCamera';
+import { PHOTO_COPY, photoFileName } from '../lib/photo-mode';
 
 /**
  * Supporting-documents step: one upload slot per requested document.
@@ -111,48 +117,147 @@ export function SupportingDocumentsStep() {
     dispatch({ type: 'SET_SUPPORTING_DOCUMENTS', payload: uploads.filter((d) => d.type !== key) });
   };
 
+  // "Take a photo" for a camera document: the SDK's own camera. It has no
+  // Upload, as the workflow wants the document photographed now; when the
+  // camera cannot run (denied, or a desktop without one) a photo can still be
+  // chosen, as the old camera input fell back to on a desktop.
+  const camera = usePhotoCamera<string>();
+  const photoInput = useRef<HTMLInputElement>(null);
+  const cameraSlot = slots.find((s) => s.key === camera.target) ?? null;
+
   const requiredComplete = slots.every((slot) => !slot.required || uploadFor(slot.key) !== null);
-  const optionalOnly = slots.every((slot) => !slot.required);
+
+  // One document at a time, stacked like the business documents: the open
+  // one in front, the next tucked behind it above and the previous below.
+  // It opens on the first document still to provide.
+  const [active, setActive] = useState(() => {
+    const first = slots.findIndex((slot) => uploadFor(slot.key) === null);
+    return first === -1 ? 0 : first;
+  });
+  const index = Math.min(active, Math.max(slots.length - 1, 0));
+  // Which way the last move went, so the open card arrives from that side.
+  const [shown, setShown] = useState(index);
+  const [direction, setDirection] = useState<'forward' | 'back' | null>(null);
+  if (shown !== index) {
+    setDirection(index > shown ? 'forward' : 'back');
+    setShown(index);
+  }
+  const slot = slots[index];
+  const nextSlot = slots[index + 1];
+  const previousSlot = slots[index - 1];
+  const last = index >= slots.length - 1;
+  const provided = slot ? uploadFor(slot.key) !== null : true;
+
+  const handleBack = () => (index > 0 ? setActive(index - 1) : goBack());
+  const handleContinue = () => (last ? goNext() : setActive(index + 1));
+
+  // What a tucked card says under its title.
+  const heldBy = (key: string, label: string) => {
+    const upload = uploadFor(key);
+    if (!upload) return t('business.documents.skipped');
+    if (upload.method === 'drawn') return t('supportingDocuments.signature.saved');
+    return displayFileName(upload.fileName ?? label) ?? t('business.documents.uploaded');
+  };
+  const motion =
+    direction === 'forward' ? 'animate-slide-down' : direction === 'back' ? 'animate-slide-up' : undefined;
 
   return (
-    <div className="space-y-6 animate-slide-up">
+    <>
+    {camera.open && cameraSlot && (
+      <PhotoCamera
+        title={cameraSlot.label}
+        instruction={PHOTO_COPY.fitDocument}
+        fileName={photoFileName(cameraSlot.label)}
+        onPhoto={(file) => void handlePick(cameraSlot.key, file)}
+        onDismiss={camera.dismiss}
+        onUpload={null}
+        onUploadInstead={() => photoInput.current?.click()}
+      />
+    )}
+    <div className={cn('space-y-6 animate-slide-up', camera.open && 'hidden')}>
+      <input
+        ref={photoInput}
+        type="file"
+        accept="image/*"
+        className="hidden"
+        onChange={(e) => {
+          const picked = e.target.files?.[0];
+          if (picked && camera.target) void handlePick(camera.target, picked);
+          e.target.value = '';
+        }}
+      />
+
       <StepHeader
         title={t('supportingDocuments.title')}
         description={supportingDocumentsIntro(slots, t)}
-        onBack={goBack}
+        onBack={handleBack}
       />
 
-      <div className="space-y-3">
-        {slots.map((slot, index) => (
-          <SupportingDocumentCard
-            key={slot.key}
-            position={index + 1}
-            total={slots.length}
-            label={slot.label}
-            description={slot.description}
-            required={slot.required}
-            reads={slot.reads}
-            // A restored upload may carry no file name; the mediaId is what says it is there.
-            fileName={uploadFor(slot.key) ? (uploadFor(slot.key)?.fileName ?? slot.label) : null}
-            capture={slot.capture}
-            drawn={uploadFor(slot.key)?.method === 'drawn'}
-            onSign={(drawing) => void handleSign(slot.key, drawing)}
-            file={files[slot.key] ?? null}
-            uploading={uploadingKey === slot.key}
-            error={errors[slot.key] ?? null}
-            onPick={(file) => void handlePick(slot.key, file)}
-            onRemove={() => handleRemove(slot.key)}
-          />
-        ))}
-      </div>
+      {slot && (
+        <div>
+          <p className="sr-only" aria-live="polite">
+            {index + 1} / {slots.length}: {slot.label}
+          </p>
+          <div key={`ahead-${index}`} className={cn(direction && 'animate-fade-in')}>
+            {slots[index + 2] && <GroupEdge side="top" />}
+            {nextSlot && (
+              <TuckedRow
+                title={nextSlot.label}
+                number={index + 2}
+                done={uploadFor(nextSlot.key) !== null}
+                detail={
+                  nextSlot.description ??
+                  t(nextSlot.required ? 'supportingDocuments.card.required' : 'supportingDocuments.card.optional')
+                }
+              />
+            )}
+          </div>
+          <div key={slot.key} className={cn('relative z-10', motion)}>
+            <SupportingDocumentCard
+              position={index + 1}
+              total={slots.length}
+              label={slot.label}
+              description={slot.description}
+              required={slot.required}
+              reads={slot.reads}
+              // A restored upload may carry no file name; the mediaId is what says it is there.
+              fileName={uploadFor(slot.key) ? (uploadFor(slot.key)?.fileName ?? slot.label) : null}
+              capture={slot.capture}
+              drawn={uploadFor(slot.key)?.method === 'drawn'}
+              onSign={(drawing) => void handleSign(slot.key, drawing)}
+              file={files[slot.key] ?? null}
+              uploading={uploadingKey === slot.key}
+              error={errors[slot.key] ?? null}
+              onPick={(file) => void handlePick(slot.key, file)}
+              onRemove={() => handleRemove(slot.key)}
+              onTakePhoto={() => camera.show(slot.key)}
+            />
+          </div>
+          <div key={`behind-${index}`} className={cn(direction && 'animate-fade-in')}>
+            {previousSlot && (
+              <TuckedRow
+                title={previousSlot.label}
+                number={index}
+                done={uploadFor(previousSlot.key) !== null}
+                detail={heldBy(previousSlot.key, previousSlot.label)}
+                onOpen={() => setActive(index - 1)}
+              />
+            )}
+            {slots[index - 2] && <GroupEdge side="bottom" />}
+          </div>
+        </div>
+      )}
 
       <Button
-        onClick={goNext}
-        disabled={!requiredComplete || uploadingKey !== null}
+        onClick={handleContinue}
+        // The open document: a required one must be provided first. On the
+        // last, every required document must be.
+        disabled={(slot?.required && !provided) || (last && !requiredComplete) || uploadingKey !== null}
         className="w-full"
       >
-        {t(optionalOnly && uploads.length === 0 ? 'common.skip' : 'common.continue')}
+        {t(slot && !slot.required && !provided ? 'common.skip' : 'common.continue')}
       </Button>
     </div>
+    </>
   );
 }

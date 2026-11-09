@@ -87,6 +87,8 @@ export interface DocumentCaptureCheckResponse {
   side: 'front' | 'back';
   face: boolean | null;
   barcode: boolean | null;
+  /** The whole document is in the photo. Absent from servers before 2026-11-09. */
+  complete?: boolean | null;
 }
 
 export interface VerifyRequest {
@@ -173,6 +175,8 @@ export interface VerifyRequest {
   deviceIntelligence?: boolean;
   /** What kind of proof-of-address document `mediaIds.proofOfAddress` is. */
   proofOfAddressType?: 'utility_bill' | 'bank_statement' | 'tenancy_agreement' | 'government_document' | 'other';
+  /** ISO-2 of the country the proof of address is from (absent = the verification's). */
+  proofOfAddressCountry?: string;
   /** Supporting documents held on file — `{ type, mediaId }` per upload. */
   supportingDocuments?: Array<{ type: string; mediaId: string }>;
   /**
@@ -473,6 +477,8 @@ export interface WorkflowConfigPayload {
    *  plus each country's multi-ID per-verification allowlists. */
   countries?: Array<{ country: string; idTypes?: string[]; multiIdSlots?: Array<{ idTypes?: string[] }> }>;
   idTypes?: string[];
+  /** Where a multi-country flow picks the country (lib/id-selection-layout.ts). */
+  idSelectionLayout?: 'combined' | 'separate';
   /** Multi-ID POLICY (per-country ID offerings live on `countries[]`). */
   multiId?: { count: number; minPassed: number };
   enableSelfie?: boolean;
@@ -610,6 +616,8 @@ export interface HandoffSessionSnapshot {
   /** Multi-region configuration (per-country ID types + multi-ID allowlists). */
   countries?: Array<{ country: string; idTypes?: string[]; multiIdSlots?: Array<{ idTypes?: string[] }> }>;
   idTypes?: string[];
+  /** Where a multi-country flow picks the country (lib/id-selection-layout.ts). */
+  idSelectionLayout?: 'combined' | 'separate';
   /** Multi-ID POLICY (per-country ID offerings live on `countries[]`). */
   multiId?: { count: number; minPassed: number };
   /** Reviewer sent this session back — walk only these steps. */
@@ -1101,7 +1109,7 @@ export function createVerificationApi(baseUrl: string, apiKey: string) {
 
     /**
      * Ask whether an uploaded document photo can be read (a face on the printed
-     * photo, a barcode that decodes), so the applicant can retake it before
+     * photo, a barcode that decodes, the whole document in the frame), so the applicant can retake it before
      * submitting. Resolves null on any failure and after `timeoutMs`: the check
      * is a courtesy and must never hold the flow up.
      */

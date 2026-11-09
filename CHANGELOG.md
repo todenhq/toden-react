@@ -1,5 +1,37 @@
 # Changelog
 
+## 4.1.0
+
+No API changes: upgrade with `npm install @toden/react@4.1.0`.
+
+**Deploy note for Toden:** `sandbox-api.toden.co` and `api.toden.co` must be serving before this release reaches integrators (both answer today). The cut-off document retake needs the server's `complete` answer on the capture check. Until that server release, it never shows.
+
+### Fixed
+
+- **Verification codes can be typed.** In 4.0.0 the boxed email and phone code field rejected every digit typed; only pasting worked. It now accepts typing, paste and one-time-code autofill.
+
+### API hosts
+
+- Each environment now has its own host, as the docs list them: `pk_test_` keys go to `https://sandbox-api.toden.co` and `pk_live_` keys to `https://api.toden.co`. Both used to go to `https://trust.myaza.app`.
+
+### Document capture
+
+- A redesigned full-screen camera on phones: a top row with back, the document and the side, an instruction that shows its state, and Upload, the shutter and Light along the bottom. The desktop camera uses the same controls and never lets the guide touch them.
+- A document that runs off the photo asks for a retake, beside the existing face and barcode checks ("Continue anyway" stays).
+- The cropper: a NIN slip gets an upright box on phones, Rotate turns the photo a quarter at a time, and on phones it opens full screen with clearer handles. Its button reads "Use photo".
+- "Take a photo" opens the SDK's own camera on desktop as well as phones, for proof of address, supporting documents and the entrance photo.
+- Supporting documents can be captured with the camera, in a stacked carousel, and a signature pad has Clear.
+
+### Steps
+
+- A redesigned consent screen: the steps as a short timed journey, calmer copy and Toden's mark.
+- The country and the ID are picked on one step. Proof of address and the business country of registration share one country row, with "Registered in" as its caption.
+- Proof of address: pick the kind of document and see what counts, with accepted documents in a sheet.
+- Every select is a floating bottom sheet on phones, with one header style for every sheet.
+- The phone field offers only the workflow's dial-code countries.
+- The liveness instruction eases between prompts. The selfie is chosen from the live run, front-on.
+- Smaller fixes: the money error sits under the amount, the address check button reads "Continue with automatic checks", and the retired BVN Premium is never offered.
+
 ## 4.0.0
 
 The first release as `@toden/react`. The version moves to 4.0.0 because everyone upgrading changes their install and imports, and because two capture defaults change.

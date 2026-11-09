@@ -30,6 +30,7 @@ import { PromptTimeline } from '../liveness/prompt-timeline';
 import { speak, stopSpeaking } from '../liveness/speech';
 import type { LightLevel, TrackedFace } from './useLightLevel';
 import { faceBoxOf } from '../lib/light-level';
+import { SelfieCandidates, type SelfieVerdict } from '../lib/selfie-candidates';
 import {
   CAPTURE_FRAMERATE,
   LIVENESS_VIDEO_BITRATE,
@@ -146,6 +147,9 @@ export interface UseLivenessOptions {
  */
 const CAPTURE_STABLE_FRAMES = 15;
 
+/** After this long on the final capture, the run's best front-on frame is used. */
+const CAPTURE_WAIT_MS = 4000;
+
 /** Frames of a centred, well-placed face before the first challenge starts (~0.8s). */
 const POSITION_STABLE_FRAMES = 25;
 
@@ -238,6 +242,18 @@ export function useLiveness({
   // frames — landmark jumps (position/scale) flag face swaps & spliced feeds.
   const prevFaceSigRef = useRef<{ x: number; y: number; iod: number } | null>(null);
   const faceGlitchesRef = useRef(0);
+
+  // The selfie is CHOSEN, not snapped (lib/selfie-pick.ts): frames are scored
+  // all through the live run and the best front-on one is kept, cut to the
+  // standard frame. `snapFreshRef` says the result in hand is for a frame the
+  // loop snapshotted; `sendCountRef` thins those snapshots during gestures.
+  const selfiesRef = useRef(new SelfieCandidates());
+  const snapFreshRef = useRef(false);
+  const sendCountRef = useRef(0);
+  // The final capture: when it began (the best frame so far is used if no
+  // better one comes), and no-face frames in a row (the run breaks on a gap).
+  const capturingSinceRef = useRef(0);
+  const capturingNoFaceRef = useRef(0);
 
   // Video recording
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
@@ -435,8 +451,17 @@ export function useLiveness({
     // the camera has since moved on — no blank/faceless capture. Fall back to
     // the live frame only if the snapshot is somehow unavailable.
     let base64: string | null = null;
+    // The best front-on frame of the run, already cut to the standard frame.
+    const chosen = selfiesRef.current.bestCanvas;
+    if (chosen) {
+      try {
+        base64 = chosen.toDataURL('image/jpeg', SELFIE_IMAGE_QUALITY);
+      } catch {
+        base64 = null;
+      }
+    }
     const snap = analyzedFrameRef.current;
-    if (snap && snap.width > 0 && snap.height > 0) {
+    if (!base64 && snap && snap.width > 0 && snap.height > 0) {
       try {
         base64 = snap.toDataURL('image/jpeg', SELFIE_IMAGE_QUALITY);
       } catch {
@@ -506,6 +531,8 @@ export function useLiveness({
         // All challenges passed — wait for steady face then capture
         positionStableRef.current = 0;
         capturingGuidanceRef.current = null;
+        capturingSinceRef.current = performance.now();
+        capturingNoFaceRef.current = 0;
         setPhase({ phase: 'capturing' });
       }
     }, 1800);
@@ -647,6 +674,36 @@ export function useLiveness({
     livenessProgressRef.current = value;
   };
 
+  // Face-continuity guard: consecutive-frame landmark jumps (face center
+  // teleporting / face size snapping) are physically impossible for a live
+  // face and typical of face swaps or spliced feeds. Three strikes fails. Any
+  // jump also drops the selfie chosen so far: it must come from one face.
+  // True when the run has just failed.
+  const continuityBroken = (landmarks: NormalizedLandmark[]): boolean => {
+    const nose = landmarks[1];
+    const leftEye = landmarks[33];
+    const rightEye = landmarks[263];
+    if (!nose || !leftEye || !rightEye || cooldownFramesRef.current !== 0) return false;
+    const iod = Math.hypot(rightEye.x - leftEye.x, rightEye.y - leftEye.y);
+    const prev = prevFaceSigRef.current;
+    prevFaceSigRef.current = { x: nose.x, y: nose.y, iod };
+    if (!prev || iod <= 0 || prev.iod <= 0) return false;
+    const jumped =
+      Math.abs(nose.x - prev.x) > 0.18 ||
+      Math.abs(nose.y - prev.y) > 0.18 ||
+      iod / prev.iod > 1.5 ||
+      iod / prev.iod < 0.66;
+    if (!jumped) return false;
+    selfiesRef.current.clear();
+    faceGlitchesRef.current++;
+    recordLivenessSignals({ mode: config?.mode ?? 'gestures', faceGlitches: faceGlitchesRef.current });
+    if (faceGlitchesRef.current < 3) return false;
+    clearChallengeTimer();
+    stopRecording();
+    setPhase({ phase: 'failed', reason: 'face_swap' });
+    return true;
+  };
+
   processLandmarksRef.current = (landmarks: NormalizedLandmark[] | null, faceCount: number) => {
     if (!mountedRef.current) return;
     if (faceRef) {
@@ -680,11 +737,20 @@ export function useLiveness({
         }
       } else if (phase === 'capturing') {
         // Face left while waiting to auto-capture — reset progress so we never
-        // snap a blank selfie the moment the face reappears.
+        // snap a blank selfie the moment the face reappears. Gone for ~1s, the
+        // run is broken: the selfie must come from the same live run as the
+        // gestures, not from whatever is held up after a gap.
         positionStableRef.current = 0;
+        capturingNoFaceRef.current++;
+        if (capturingNoFaceRef.current > 30) {
+          selfiesRef.current.clear();
+          stopRecording();
+          setPhase({ phase: 'failed', reason: 'face_lost' });
+        }
       }
       return;
     }
+    capturingNoFaceRef.current = 0;
 
     setIsFaceDetected(true);
     flashNoFaceFramesRef.current = 0;
@@ -714,6 +780,13 @@ export function useLiveness({
       }
       return;
     }
+
+    // Offer the frame the loop snapshotted for these landmarks as the selfie.
+    let selfieVerdict: SelfieVerdict | null = null;
+    if (snapFreshRef.current && (phase === 'challenge' || phase === 'capturing') && analyzedFrameRef.current) {
+      selfieVerdict = selfiesRef.current.consider(analyzedFrameRef.current, landmarks);
+    }
+    snapFreshRef.current = false;
 
     // Single face again — resume a paused challenge by restarting its timer.
     if (multiFacePausedRef.current) {
@@ -779,37 +852,7 @@ export function useLiveness({
       // color flashes legitimately disturb the landmark tracking.
       if (current.config.type === 'flash') return;
 
-      // Face-continuity guard: consecutive-frame landmark jumps (face center
-      // teleporting / face size snapping) are physically impossible for a live
-      // face and typical of face swaps or spliced feeds. Three strikes fails.
-      const nose = landmarks[1];
-      const leftEye = landmarks[33];
-      const rightEye = landmarks[263];
-      if (nose && leftEye && rightEye && cooldownFramesRef.current === 0) {
-        const iod = Math.hypot(rightEye.x - leftEye.x, rightEye.y - leftEye.y);
-        const prev = prevFaceSigRef.current;
-        if (prev && iod > 0 && prev.iod > 0) {
-          const jumped =
-            Math.abs(nose.x - prev.x) > 0.18 ||
-            Math.abs(nose.y - prev.y) > 0.18 ||
-            iod / prev.iod > 1.5 ||
-            iod / prev.iod < 0.66;
-          if (jumped) {
-            faceGlitchesRef.current++;
-            recordLivenessSignals({
-              mode: config?.mode ?? 'gestures',
-              faceGlitches: faceGlitchesRef.current,
-            });
-            if (faceGlitchesRef.current >= 3) {
-              clearChallengeTimer();
-              stopRecording();
-              setPhase({ phase: 'failed', reason: 'face_swap' });
-              return;
-            }
-          }
-        }
-        prevFaceSigRef.current = { x: nose.x, y: nose.y, iod };
-      }
+      if (continuityBroken(landmarks)) return;
 
       // Check if user has moved out of position
       const pos = checkFacePosition(
@@ -904,8 +947,18 @@ export function useLiveness({
         setPhase({ phase: 'capturing', guidance: light });
         return;
       }
+      if (continuityBroken(landmarks)) return;
+      // The best frame so far stands in once the person has had a fair chance
+      // to give a better one, rather than holding them on the step.
+      if (selfiesRef.current.bestCanvas && performance.now() - capturingSinceRef.current > CAPTURE_WAIT_MS) {
+        doCapture();
+        return;
+      }
       const pos = checkFacePosition(landmarks, tRef.current, positionFrame());
-      if (pos.isCentered && pos.isCorrectDistance) {
+      // A frame counts toward the shutter only if it could be the selfie:
+      // facing the camera, eyes open, close enough for the standard frame.
+      const usable = selfieVerdict === 'kept' || selfieVerdict === 'worse';
+      if (pos.isCentered && pos.isCorrectDistance && usable) {
         positionStableRef.current++;
         // Need ~15 stable frames (~0.5s) for a clear photo
         if (positionStableRef.current > CAPTURE_STABLE_FRAMES) {
@@ -917,9 +970,15 @@ export function useLiveness({
         }
       } else {
         positionStableRef.current = Math.max(0, positionStableRef.current - 3);
-        // Surface WHY we're not capturing (too far / off-centre) instead of a
-        // silent "hold still" the user can't act on.
-        const guidance = pos.guidance ?? tRef.current('presence.position.holdStill');
+        // Surface WHY we're not capturing (too far / off-centre / turned)
+        // instead of a silent "hold still" the user can't act on.
+        const guidance =
+          pos.guidance ??
+          (selfieVerdict === 'turned'
+            ? tRef.current('presence.position.lookStraight')
+            : selfieVerdict === 'far'
+              ? tRef.current('presence.position.moveCloser')
+              : tRef.current('presence.position.holdStill'));
         if (capturingGuidanceRef.current !== guidance) {
           capturingGuidanceRef.current = guidance;
           setPhase({ phase: 'capturing', guidance });
@@ -948,7 +1007,17 @@ export function useLiveness({
       // analyze. doCapture reads this back, so the selfie is the frame whose
       // landmarks confirmed a centered face — not a later, post-latency frame
       // that may already be blank.
-      if (phaseRef.current === 'capturing') drawAnalyzedFrame(video, analyzedFrameRef);
+      // During the gestures too, every third frame, so the selfie can be
+      // chosen from the whole live run (selfie-candidates.ts).
+      const phaseNow = phaseRef.current;
+      sendCountRef.current++;
+      const snapNow =
+        phaseNow === 'capturing' ||
+        (phaseNow === 'challenge' &&
+          trackerRef.current?.current?.config.type !== 'flash' &&
+          sendCountRef.current % 3 === 0);
+      if (snapNow) drawAnalyzedFrame(video, analyzedFrameRef);
+      snapFreshRef.current = snapNow;
       mesh
         .send(video)
         .catch(() => {
@@ -1054,6 +1123,8 @@ export function useLiveness({
     setFlashColor(null);
     prevFaceSigRef.current = null;
     faceGlitchesRef.current = 0;
+    selfiesRef.current.clear();
+    snapFreshRef.current = false;
 
     // Cancel and close any existing FaceMesh instance so the effect re-initialises cleanly
     if (rafRef.current) cancelAnimationFrame(rafRef.current);

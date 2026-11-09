@@ -41,6 +41,7 @@ export const PRESENCE_CAPTURE_ENTRIES: TextEntry[] = [
   },
   { key: 'presence.position.placeFace', label: 'Guidance: position your face', default: 'Kindly position your face in the circle' },
   { key: 'presence.position.moveCloser', label: 'Guidance: move closer', default: 'Kindly move closer' },
+  { key: 'presence.position.lookStraight', label: 'Guidance: face the camera', default: 'Kindly look straight at the camera' },
   { key: 'presence.position.centerFace', label: 'Guidance: centre your face', default: 'Kindly center your face' },
   { key: 'presence.position.moveAway', label: 'Guidance: move further away', default: 'Kindly move further away' },
   { key: 'presence.position.holdStill', label: 'Guidance: hold still', default: 'Kindly hold still' },

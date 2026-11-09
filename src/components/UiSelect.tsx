@@ -1,13 +1,12 @@
 'use client';
 
 import React, { useEffect, useRef, useState } from 'react';
-import { createPortal } from 'react-dom';
 import { Check, ChevronsUpDown, Search } from './icons';
 
 import { cn } from '../lib/utils';
 import { useDropdownAnchor } from '../lib/use-dropdown-anchor';
 import { eventPathIncludes } from '../lib/event-path';
-import { DropdownSurface } from './DropdownSurface';
+import { PickerSurface, pickerListProps, usePickerSheet } from './PickerSurface';
 
 // A plain single-choice select — the web counterpart of the RN and Flutter
 // SDKs' UiSelect, so a field rendered as a dropdown on a phone is a dropdown
@@ -42,6 +41,8 @@ export interface UiSelectProps<T extends string> {
    */
   searchable?: boolean;
   'aria-label'?: string;
+  /** The sheet's heading on a phone, what is being picked; else the label or placeholder. */
+  title?: string;
 }
 
 export function UiSelect<T extends string>({
@@ -53,6 +54,7 @@ export function UiSelect<T extends string>({
   enabled = true,
   searchable = false,
   'aria-label': ariaLabel,
+  title,
 }: UiSelectProps<T>) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
@@ -61,6 +63,8 @@ export function UiSelect<T extends string>({
   const triggerRef = useRef<HTMLButtonElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
   const anchor = useDropdownAnchor(open, triggerRef, { width: 'trigger', menuRef });
+  // A bottom sheet on a phone, as the mobile SDKs open it; a menu otherwise.
+  const sheet = usePickerSheet();
 
   const selected = options.find((o) => o.value === value);
   const shown = query.trim()
@@ -74,8 +78,10 @@ export function UiSelect<T extends string>({
       setQuery('');
       return;
     }
-    if (searchable) requestAnimationFrame(() => searchRef.current?.focus());
-  }, [open, searchable]);
+    // Not in the sheet: focusing there raises the keyboard over the list
+    // before anyone asked to type.
+    if (searchable && !sheet) requestAnimationFrame(() => searchRef.current?.focus());
+  }, [open, searchable, sheet]);
 
   useEffect(() => {
     if (!open) return undefined;
@@ -89,13 +95,15 @@ export function UiSelect<T extends string>({
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') setOpen(false);
     };
-    document.addEventListener('pointerdown', onPointerDown);
+    // The sheet takes its own outside taps (the backdrop) and drags; a
+    // document listener would read a drag on its handle as a tap outside.
+    if (!sheet) document.addEventListener('pointerdown', onPointerDown);
     document.addEventListener('keydown', onKeyDown);
     return () => {
       document.removeEventListener('pointerdown', onPointerDown);
       document.removeEventListener('keydown', onKeyDown);
     };
-  }, [open]);
+  }, [open, sheet]);
 
   return (
     <div ref={rootRef} className="relative">
@@ -120,57 +128,56 @@ export function UiSelect<T extends string>({
         <ChevronsUpDown className="h-4 w-4 shrink-0 opacity-50" aria-hidden />
       </button>
 
-      {open && anchor.host && createPortal(
-        <DropdownSurface menuRef={menuRef}>
-          <div
-            style={anchor.style}
-            role="listbox"
-            className="z-50 overflow-hidden rounded-xl border border-border bg-popover text-popover-foreground shadow-lg animate-slide-up"
-          >
-            {searchable && (
-              <div className="flex items-center gap-2 border-b border-border px-3">
-                <Search className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden />
-                <input
-                  ref={searchRef}
-                  type="text"
-                  value={query}
-                  onChange={(e) => setQuery(e.target.value)}
-                  placeholder="Search…"
-                  aria-label="Filter options"
-                  className="h-11 w-full bg-transparent text-base outline-none placeholder:text-muted-foreground sm:text-sm"
-                />
-              </div>
-            )}
-            <div className="overflow-y-auto p-1.5" style={{ maxHeight: anchor.maxHeight }}>
-              {shown.length === 0 && (
-                <p className="px-3 py-8 text-center text-sm text-muted-foreground">No matches</p>
-              )}
-              {shown.map((o) => (
-                <button
-                  key={o.value}
-                  type="button"
-                  role="option"
-                  aria-selected={o.value === value}
-                  onClick={() => {
-                    onChange(o.value);
-                    setOpen(false);
-                  }}
-                  className={cn(
-                    'flex min-h-11 w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-sm transition-colors',
-                    'hover:bg-accent focus-visible:bg-accent focus-visible:outline-none',
-                    o.value === value && 'bg-primary/5 font-medium',
-                  )}
-                >
-                  {o.icon}
-                  <span className="flex-1 truncate">{o.label}</span>
-                  {o.value === value && <Check className="h-4 w-4 shrink-0 text-primary" aria-hidden />}
-                </button>
-              ))}
+      <PickerSurface
+        sheet={sheet}
+        open={open}
+        onClose={() => setOpen(false)}
+        title={title ?? ariaLabel ?? placeholder}
+        menuRef={menuRef}
+        anchor={anchor}
+        role="listbox"
+      >
+          {searchable && (
+            <div className="flex items-center gap-2 border-b border-border px-3">
+              <Search className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden />
+              <input
+                ref={searchRef}
+                type="text"
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder="Search…"
+                aria-label="Filter options"
+                className="h-11 w-full bg-transparent text-base outline-none placeholder:text-muted-foreground sm:text-sm"
+              />
             </div>
+          )}
+          <div {...pickerListProps(sheet, anchor.maxHeight, 'p-1.5')}>
+            {shown.length === 0 && (
+              <p className="px-3 py-8 text-center text-sm text-muted-foreground">No matches</p>
+            )}
+            {shown.map((o) => (
+              <button
+                key={o.value}
+                type="button"
+                role="option"
+                aria-selected={o.value === value}
+                onClick={() => {
+                  onChange(o.value);
+                  setOpen(false);
+                }}
+                className={cn(
+                  'flex min-h-11 w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-sm transition-colors',
+                  'hover:bg-accent focus-visible:bg-accent focus-visible:outline-none',
+                  o.value === value && 'bg-primary/5 font-medium',
+                )}
+              >
+                {o.icon}
+                <span className="flex-1 truncate">{o.label}</span>
+                {o.value === value && <Check className="h-4 w-4 shrink-0 text-primary" aria-hidden />}
+              </button>
+            ))}
           </div>
-        </DropdownSurface>,
-        anchor.host,
-      )}
+      </PickerSurface>
     </div>
   );
 }

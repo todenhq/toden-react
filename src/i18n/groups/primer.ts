@@ -35,7 +35,7 @@ export const PRIMER_TEXTS: TextGroup = {
       multiline: true,
     },
     { key: 'primer.selfie.checklist1', label: 'Selfie: checklist 1', default: 'Put your face in the circle' },
-    { key: 'primer.selfie.checklist2', label: 'Selfie: checklist 2', default: 'Take off glasses or anything covering your face' },
+    { key: 'primer.selfie.checklist2', label: 'Selfie: checklist 2', default: 'Take off glasses, hats, caps or anything covering your face' },
     // checklist3 was the time line and is retired (the screen no longer shows
     // a duration). The light line took a new key rather than reusing it, since
     // a published key keeps its meaning; the label follows the screen's order.

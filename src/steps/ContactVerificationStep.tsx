@@ -12,7 +12,7 @@ import { ContactCodePanel } from './ContactCodePanel';
 import { stepAfterContactVerified } from './contact-recovery';
 import { useVerificationContext } from '../context/VerificationContext';
 import { useVerificationConfig } from '../context/VerificationConfigContext';
-import { stepAfterContact } from '../lib/contact-steps';
+import { stepAfterContact, stepBeforeContact } from '../lib/contact-steps';
 import { isBusinessFlow } from '../lib/business';
 import { isScopedBusiness } from '../lib/scope';
 import { businessKey } from '../i18n/business-variants';
@@ -149,6 +149,9 @@ export function ContactVerificationStep({ channel }: { channel: 'email' | 'phone
   return (
     <div className="space-y-6 animate-slide-up">
       <StepHeader
+        // Back into the previous contact step or consent; none while
+        // recovering from a refused submission, which returns to the end.
+        onBack={recovery ? undefined : () => dispatch({ type: 'SET_STEP', payload: stepBeforeContact(config, channel) })}
         title={t(businessKey(isEmail ? 'contact.email.title' : 'contact.phone.title', scopedBusiness))}
         description={t(
           businessKey(`contact.${channel}.${challengeId ? 'codeSent' : 'intro'}`, scopedBusiness),
@@ -189,6 +192,7 @@ export function ContactVerificationStep({ channel }: { channel: 'email' | 'phone
             )}
             disabled={busy}
             scopedBusiness={scopedBusiness}
+            countries={config.phoneVerification?.countries}
           />
           <ContactChannelPicker offered={offeredChannels} picked={via} onPick={setVia} disabled={busy} />
         </div>

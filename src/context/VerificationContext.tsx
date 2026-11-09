@@ -47,6 +47,7 @@ export const initialVerificationState: VerificationState = {
   questionnaireAnswers: {},
   poaDocumentType: null,
   poaFileName: null,
+  poaCountry: null,
   address: null,
   addressBookReuse: null,
   addressBookReuseRefused: false,
@@ -486,9 +487,12 @@ export function verificationReducer(state: VerificationState, action: Verificati
     case 'SET_POA_DOCUMENT':
       return {
         ...state,
-        poaDocumentType: action.payload.documentType,
+        poaDocumentType: action.payload.documentType ?? null,
         poaFileName: action.payload.fileName,
       };
+
+    case 'SET_POA_COUNTRY':
+      return state.poaCountry === action.payload ? state : { ...state, poaCountry: action.payload };
 
     case 'SET_ADDRESS':
       return { ...state, address: action.payload };
