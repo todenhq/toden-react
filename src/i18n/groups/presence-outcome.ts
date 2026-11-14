@@ -22,6 +22,30 @@ export const PRESENCE_OUTCOME_ENTRIES: TextEntry[] = [
     default: "We couldn't verify face continuity. Keep your face steady in the frame and try again.",
     multiline: true,
   },
+  {
+    key: 'presence.failed.attemptsLeft.one',
+    label: 'Attempts left: one',
+    default: '{count} attempt left.',
+    placeholders: ['count'],
+  },
+  {
+    key: 'presence.failed.attemptsLeft.other',
+    label: 'Attempts left: several',
+    default: '{count} attempts left.',
+    placeholders: ['count'],
+  },
+  {
+    key: 'presence.declined.title',
+    label: 'Declined after too many attempts: title',
+    default: "We couldn't verify your face",
+  },
+  {
+    key: 'presence.declined.description',
+    label: 'Declined after too many attempts: description',
+    default:
+      'The face check did not succeed in the attempts allowed, so this verification has ended. Contact the organisation that sent it if you need help.',
+    multiline: true,
+  },
   { key: 'presence.failed.generic', label: 'Error: something went wrong', default: 'Something went wrong.' },
   { key: 'presence.tryAgainButton', label: 'Try again button', default: 'Try Again' },
   { key: 'presence.review.title', label: 'Review: title', default: 'Selfie Captured' },

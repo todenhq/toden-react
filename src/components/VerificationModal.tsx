@@ -24,6 +24,8 @@ import { LivenessCameraContext } from './liveness-camera';
 import { useLivenessLight } from './use-liveness-light';
 import { Button } from './ui/button';
 import { SessionCancelledScreen, useReportCancellation } from './SessionCancelledScreen';
+import { SessionDeclinedScreen, useReportDecline } from './SessionDeclinedScreen';
+import { sessionDeclinedCopy } from '../lib/session-declined';
 import { useReportUnsupportedScope } from './unsupported-scope';
 import { useText } from '../i18n';
 import { cn } from '../lib/utils';
@@ -295,7 +297,10 @@ export function VerificationModal({ open, onClose, showThemeToggle, disableClose
   // run, reported to onError once.
   const cancelled = configError ? null : state.sessionCancelled;
   useReportCancellation(cancelled, config.onError, t('general.sessionCancelled.description'));
-  const blocked = configError !== null || cancelled !== null;
+  // Declined by the server (lib/session-declined.ts): terminal the same way.
+  const declined = configError || cancelled ? null : state.sessionDeclined;
+  useReportDecline(declined, config.onError, (d) => sessionDeclinedCopy(d, (key) => t(key)).description);
+  const blocked = configError !== null || cancelled !== null || declined !== null;
 
   // Apply the configured initial light/dark mode — 'system' follows (and
   // tracks) the device preference. Runs on mount (and if the prop changes);
@@ -493,11 +498,15 @@ export function VerificationModal({ open, onClose, showThemeToggle, disableClose
                 ? 'overflow-hidden'
                 : 'overflow-y-auto p-6',
               !immersive && fullscreen && 'xl:mx-auto xl:w-full xl:max-w-2xl',
-            )} key={configError ? 'config-error' : cancelled ? 'session-cancelled' : state.currentStep}>
+            )} key={configError ? 'config-error' : cancelled ? 'session-cancelled' : declined ? 'session-declined' : state.currentStep}>
               {configError ? (
                 <ConfigErrorScreen message={configError} onClose={onClose} />
               ) : cancelled ? (
-                <SessionCancelledScreen message={cancelled.message} onClose={onClose} />
+                // A full-page hosted link cannot close (disableClose): the
+                // final screen then offers no Close that would do nothing.
+                <SessionCancelledScreen message={cancelled.message} onClose={disableClose ? undefined : onClose} />
+              ) : declined ? (
+                <SessionDeclinedScreen declined={declined} onClose={disableClose ? undefined : onClose} />
               ) : (
                 <>
                   {/* Not over the full-screen selfie camera: it has no

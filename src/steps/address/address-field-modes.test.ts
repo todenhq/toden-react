@@ -23,7 +23,7 @@ const address = (over: Partial<Address> = {}): Address =>
     propertyName: '',
     propertyNumber: '',
     directions: '',
-    parts: { street: 'Bassey Street', area: 'Idim Ita', city: 'Calabar', state: 'Cross River', postcode: '540281', country: 'NG' },
+    parts: { street: 'Adebayo Street', area: 'Idim Ita', city: 'Calabar', state: 'Cross River', postcode: '540281', country: 'NG' },
     ...over,
   }) as Address;
 

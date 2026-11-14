@@ -55,6 +55,8 @@ import {
 import { LiveView } from './liveness/LiveView';
 import { ReviewView } from './liveness/ReviewView';
 import { useBlurBudget } from './liveness/use-blur-budget';
+import { useLivenessAttempts } from './liveness/use-liveness-attempts';
+import { attemptsLeftLine } from '../lib/liveness-attempts';
 
 /** How long the full-screen camera is held after the photo: the shutter, then
  *  the scan down the window (globals.css `liveness-scan`), then a breath. */
@@ -433,6 +435,10 @@ export function LivenessStep() {
       lastGestureRef.current = activeChallenge.type;
     }
   }, [activeChallenge?.type]);
+
+  // The workflow's maxLivenessAttempts: each failed check is reported, and the
+  // answer adds the attempts left to the failure panel (or ends the flow).
+  const attempts = useLivenessAttempts(phase, phase === 'failed' ? liveness.state.reason : null);
 
   // ---------------------------------------------------------------------------
   // Navigation
@@ -848,6 +854,7 @@ export function LivenessStep() {
           phase === 'failed'
             ? {
                 message: t(FAILURE_TEXT_KEYS[liveness.state.reason] ?? 'presence.failed.generic'),
+                note: attemptsLeftLine(attempts, t),
                 retryLabel: t('presence.tryAgainButton'),
                 onRetry: liveness.retry,
               }

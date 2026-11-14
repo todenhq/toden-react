@@ -350,6 +350,12 @@ export interface EmailVerificationConfig {
   /** Adds the email OTP step (right after consent). */
   enabled?: boolean;
   /**
+   * Work addresses only. The server refuses a free-provider address (Gmail,
+   * Outlook and the like) at send with `invalid_destination`, reason
+   * `corporate_email_required`; the SDK does not pre-check it.
+   */
+  corporateOnly?: boolean;
+  /**
    * Whether a verified email is required to proceed (default true when
    * enabled). `false` shows a "skip for now" affordance and the server accepts
    * a submission without the proof.
@@ -361,6 +367,18 @@ export interface EmailVerificationConfig {
   maxAttempts?: number;
   /** Code field style: 'segmented' boxes (default) or a plain 'text' input. */
   inputStyle?: OtpInputStyle;
+  /**
+   * Letters as well as digits in the code (default false: digits only). The
+   * server sends from 23456789ABCDEFGHJKMNPQRSTUVWXYZ and compares without
+   * regard to case; the field accepts any letter or digit and upper-cases it.
+   */
+  alphanumericCode?: boolean;
+  /**
+   * Decline the whole session when a code's attempts run out (default false:
+   * the applicant can request a new code). Read by the server, which answers
+   * `409 session_declined`; the SDK then shows the declined screen.
+   */
+  declineOnLastAttempt?: boolean;
 }
 
 export interface PhoneVerificationConfig {
@@ -374,6 +392,18 @@ export interface PhoneVerificationConfig {
   maxAttempts?: number;
   /** Code field style: 'segmented' boxes (default) or a plain 'text' input. */
   inputStyle?: OtpInputStyle;
+  /**
+   * Letters as well as digits in the code (default false: digits only). The
+   * server sends from 23456789ABCDEFGHJKMNPQRSTUVWXYZ and compares without
+   * regard to case; the field accepts any letter or digit and upper-cases it.
+   */
+  alphanumericCode?: boolean;
+  /**
+   * Decline the whole session when a code's attempts run out (default false:
+   * the applicant can request a new code). Read by the server, which answers
+   * `409 session_declined`; the SDK then shows the declined screen.
+   */
+  declineOnLastAttempt?: boolean;
   /** Offered delivery channels (default ['sms']). */
   channels?: Array<'sms' | 'whatsapp'>;
   /** Default dial-code country for the phone input (falls back to the flow's country). */
@@ -458,7 +488,10 @@ export interface VerificationAppearance {
    * - An image URL renders that logo.
    * - The literal `'default'` renders the org's own logo from the server config
    *   response (falls back to the built-in shield if the org has none set).
-   * - Omitted renders the built-in shield badge.
+   * - Omitted shows the organisation's logo, as `'default'` does (the built-in
+   *   shield if the organisation has none).
+   * - An empty string (`''`) shows no logo. A workflow's "None" logo is this,
+   *   and it wins over a logo the app sets.
    */
   logo?: string;
   /**
@@ -500,8 +533,9 @@ export interface VerificationAppearance {
     | 'overlayColor'
     | 'textColor'
   >;
-  /** Initial mode. 'system' follows the device's prefers-color-scheme (live);
-   *  applied on mount; the theme toggle can flip it. */
+  /** Initial mode. 'system' (the default when neither this nor the workflow
+   *  sets one) follows the device's prefers-color-scheme, live; applied on
+   *  mount; the theme toggle can flip it. */
   theme?: 'light' | 'dark' | 'system';
 }
 
@@ -803,6 +837,17 @@ export interface VerificationConfig<C extends AnyCountry = AnyCountry> {
   livenessMode?: 'gestures' | 'flash' | 'both' | 'passive';
   /** Flash-liveness sequence length (colours) for `flash`/`both`. 2–5, default 4. */
   flashSequenceLength?: number;
+  /**
+   * Maximum liveness attempts, 1 to 3, or `false` for no limit; absent means
+   * 3, the default. Each failed
+   * check is reported to the server, the failure panel says how many attempts
+   * are left, and at the limit the server declines the session: the flow ends
+   * on the declined screen and `onError` fires once with `session_declined`
+   * (reason `liveness_attempts_exceeded`). The server reads the limit from the
+   * published workflow, so it only applies to a workflow session. Usually
+   * configured in the workflow builder.
+   */
+  maxLivenessAttempts?: number | false;
   /**
    * Bright screen during the selfie: while the liveness camera is on, the flow
    * switches to its LIGHT palette so the display lights the person's face, then

@@ -47,6 +47,8 @@ const NOT_RECOVERABLE = new Set([
   'rate_limited',
   // Cancelled by the organisation: nothing the applicant changes reopens it.
   'session_cancelled',
+  // Declined by the server: final, nothing the applicant changes reopens it.
+  'session_declined',
 ]);
 
 const has = (map: Readonly<Record<string, VerificationStep>>, key: string): boolean =>

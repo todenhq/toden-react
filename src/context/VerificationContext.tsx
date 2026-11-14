@@ -20,6 +20,7 @@ export const initialVerificationState: VerificationState = {
   isOpen: false,
   sessionId: null,
   sessionCancelled: null,
+  sessionDeclined: null,
   resumedApplication: null,
   selectedCountry: null,
   countryAutoPicked: false,
@@ -70,8 +71,13 @@ export function verificationReducer(state: VerificationState, action: Verificati
 
     // Idempotent: the first message wins, so a later refusal cannot reword the
     // screen under the applicant.
+    // The first end wins too: a session refused as declined is not later
+    // reworded as cancelled, nor the reverse.
     case 'SET_SESSION_CANCELLED':
-      return state.sessionCancelled ? state : { ...state, sessionCancelled: action.payload };
+      return state.sessionCancelled || state.sessionDeclined ? state : { ...state, sessionCancelled: action.payload };
+
+    case 'SET_SESSION_DECLINED':
+      return state.sessionCancelled || state.sessionDeclined ? state : { ...state, sessionDeclined: action.payload };
 
     case 'SET_RESUMED_APPLICATION':
       return { ...state, resumedApplication: action.payload };
@@ -432,6 +438,20 @@ export function verificationReducer(state: VerificationState, action: Verificati
     case 'SET_DOCUMENT_BACK_VIDEO':
       return { ...state, documentBackVideoBlob: action.payload };
 
+    // A side's recording belongs to one capture of it (lib/document-recordings.ts).
+    case 'CLEAR_DOCUMENT_VIDEO':
+      return action.payload === 'back'
+        ? {
+            ...state,
+            documentBackVideoBlob: null,
+            mediaIds: { ...state.mediaIds, documentBackVideo: undefined },
+          }
+        : {
+            ...state,
+            documentFrontVideoBlob: null,
+            mediaIds: { ...state.mediaIds, documentFrontVideo: undefined },
+          };
+
     case 'SET_LIVENESS_VIDEO':
       return { ...state, livenessVideoBlob: action.payload };
 
@@ -568,8 +588,14 @@ export function verificationReducer(state: VerificationState, action: Verificati
 
     case 'RESET':
       // A cancellation is the server's answer about this attempt; reopening the
-      // modal cannot undo it, only an admin's uncancel can.
-      return { ...initialVerificationState, sessionCancelled: state.sessionCancelled };
+      // modal cannot undo it, only an admin's uncancel can. A decline is NOT
+      // kept: it ends that session only, and a new start gets a fresh one
+      // (the server refuses the old session itself, so a reopened hosted link
+      // is declined again by the server).
+      return {
+        ...initialVerificationState,
+        sessionCancelled: state.sessionCancelled,
+      };
   }
 }
 
@@ -591,6 +617,7 @@ const VerificationContext = createContext<VerificationContextValue | null>(null)
 export function VerificationProvider({
   children,
   initialStep,
+  initialDeclined,
 }: {
   children: ReactNode;
   /**
@@ -599,10 +626,18 @@ export function VerificationProvider({
    * screen (and a "step 1 of N" progress bar) for a frame first.
    */
   initialStep?: VerificationState['currentStep'];
+  /**
+   * Open already declined: the hosted page reopening a session the server
+   * declined paints the flow's own declined screen first, in the modal,
+   * rather than a frame of the first step.
+   */
+  initialDeclined?: import('../lib/session-declined').SessionDeclined;
 }) {
-  const [state, dispatch] = useReducer(verificationReducer, initialVerificationState, (base) =>
-    initialStep ? { ...base, currentStep: initialStep } : base,
-  );
+  const [state, dispatch] = useReducer(verificationReducer, initialVerificationState, (base) => ({
+    ...base,
+    ...(initialStep ? { currentStep: initialStep } : {}),
+    ...(initialDeclined ? { sessionDeclined: initialDeclined } : {}),
+  }));
 
   // Step journey log — records every step the user reaches, at the ONE seam
   // every mount variant shares (embedded modal, config-driven, hosted page —

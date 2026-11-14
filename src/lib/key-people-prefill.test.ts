@@ -68,9 +68,9 @@ describe('a register that lists one person several times', () => {
     { name: 'Atambi Tony Joseph', designation: 'WITNESS' },
     { name: 'Archibong Bassey Charles', designation: 'DIRECTOR' },
     { name: 'Archibong Bassey Charles', designation: 'SHAREHOLDER' },
-    { name: 'Ingwe Unimke Richard', designation: 'DIRECTOR' },
-    { name: 'Ingwe Unimke Richard', designation: 'SHAREHOLDER' },
-    { name: 'Ingwe Unimke Richard', designation: 'PERSONS WITH SIGNIFICANT CONTROL' },
+    { name: 'Okeke Obinna Chinedu', designation: 'DIRECTOR' },
+    { name: 'Okeke Obinna Chinedu', designation: 'SHAREHOLDER' },
+    { name: 'Okeke Obinna Chinedu', designation: 'PERSONS WITH SIGNIFICANT CONTROL' },
   ];
 
   it('offers one row per person, not one per registry entry', () => {
@@ -79,7 +79,7 @@ describe('a register that lists one person several times', () => {
     const rows = prefillKeyPeople(FLITSTACK, 'NG');
     expect(rows.map((r) => r.name)).toEqual([
       'Archibong Bassey Charles',
-      'Ingwe Unimke Richard',
+      'Okeke Obinna Chinedu',
     ]);
   });
 

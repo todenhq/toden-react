@@ -33,7 +33,8 @@ export function useReportCancellation(
   }, [cancelled, onError, fallback]);
 }
 
-export function SessionCancelledScreen({ message, onClose }: { message: string | null; onClose: () => void }) {
+/** `onClose` absent: nothing to close to (a full-page hosted link), so no button. */
+export function SessionCancelledScreen({ message, onClose }: { message: string | null; onClose?: () => void }) {
   const t = useText();
   return (
     <div className="flex flex-col items-center gap-6 py-8 animate-fade-in" role="alert">
@@ -59,9 +60,11 @@ export function SessionCancelledScreen({ message, onClose }: { message: string |
         <p className="text-sm text-muted-foreground">{message ?? t('general.sessionCancelled.description')}</p>
       </div>
 
-      <Button className="w-full" onClick={onClose}>
-        {t('common.close')}
-      </Button>
+      {onClose && (
+        <Button className="w-full" onClick={onClose}>
+          {t('common.close')}
+        </Button>
+      )}
     </div>
   );
 }

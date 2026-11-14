@@ -13,7 +13,7 @@ import type { AddressSearchHit } from '../services/api';
 import { useText } from '../i18n';
 
 // The address step's search box — the OkHi flow's best idea, in our order:
-// type the address you know ("11 bassey street"), pick a candidate, and the
+// type the address you know ("11 adebayo street"), pick a candidate, and the
 // pin lands there with the house number prefilled. Search fires on EXPLICIT
 // submit only (Enter or the button) — the map source's policy forbids
 // autocomplete, and the CAC rule applies: spend the request on the query the

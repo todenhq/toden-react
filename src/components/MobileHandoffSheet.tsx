@@ -72,7 +72,7 @@ export function MobileHandoffSheet() {
   // A failed mint that left nothing behind has nothing to give back.
   const nothingToReturn = handoff.phase === 'error' && !handoff.unresolved;
   const returnBlocked = !nothingToReturn && (leaving || !handoff.sessionId ||
-    ['creating', 'error', 'opened', 'submitted'].includes(handoff.phase));
+    ['creating', 'error', 'opened', 'submitted', 'declined'].includes(handoff.phase));
 
   const stayHere = async () => {
     if (returnBlocked || returningRef.current) return;
@@ -111,6 +111,15 @@ export function MobileHandoffSheet() {
       }, 1500);
     }
   }, [handoff.phase, handoff.verificationId, config, dispatch]);
+
+  // The other device's session was declined, and this flow's with it: close
+  // the sheet; the modal swaps to the declined screen and reports onError.
+  useEffect(() => {
+    if (handoff.phase === 'declined' && handoff.declined) {
+      setOpen(false);
+      dispatch({ type: 'SET_SESSION_DECLINED', payload: handoff.declined });
+    }
+  }, [handoff.phase, handoff.declined, dispatch]);
 
   const copyLink = () => {
     if (!handoff.url) return;

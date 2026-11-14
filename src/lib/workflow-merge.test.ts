@@ -140,4 +140,16 @@ describe('mergeWorkflowConfig', () => {
     );
     expect(leg.allowDocumentScan).toBe(false);
   });
+
+  it('maxLivenessAttempts reaches the config from the workflow, on the mount and on a mapped applicant leg', () => {
+    const props: { country: string; apiKey: string; maxLivenessAttempts?: number } = { country: 'NG', apiKey: 'pk' };
+    expect(mergeWorkflowConfig({ country: 'NG', livenessMode: 'flash', maxLivenessAttempts: 2 }, props).maxLivenessAttempts).toBe(2);
+    // A workflow without the setting leaves no limit.
+    expect(mergeWorkflowConfig({ country: 'NG' }, props).maxLivenessAttempts).toBeUndefined();
+    const leg = overlayApplicantWorkflow(
+      { id: 'wf_applicant', config: { country: 'NG', maxLivenessAttempts: 3 } },
+      { country: 'NG' } as { country: string; maxLivenessAttempts?: number },
+    );
+    expect(leg.maxLivenessAttempts).toBe(3);
+  });
 });

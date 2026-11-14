@@ -6,6 +6,7 @@ import { Button } from '../../components/ui/button';
 import { GESTURE_FULL_SIZE, gestureSize, ROOM_FOR_GESTURE, type Size } from '../../lib/liveness-cutout';
 import type { LivenessChallenge } from '../../liveness/types';
 import { LivenessAvatar } from '../LivenessAvatar';
+import { AttemptsLeftNotice } from './AttemptsLeftNotice';
 import { ImmersiveFrame } from './ImmersiveFrame';
 import { InstructionPill, type InstructionTone } from './InstructionPill';
 import { GesturePlate, Panel, Reassurance, StepCount } from './surfaces';
@@ -40,8 +41,12 @@ export interface LiveViewProps {
   lightingNote: string | null;
   step: number;
   total: number;
-  /** Why the check stopped, with its retry, or null while it is running. */
-  failure: { message: string; retryLabel: string; onRetry: () => void } | null;
+  /**
+   * Why the check stopped, with its retry, or null while it is running. `note`
+   * is the attempts left when the workflow limits them
+   * (lib/liveness-attempts.ts), shown as a small warning under the message.
+   */
+  failure: { message: string; note?: string | null; retryLabel: string; onRetry: () => void } | null;
   dimRoom: boolean;
   blurs: boolean;
   onBack: () => void;
@@ -146,25 +151,27 @@ export function LiveView(p: LiveViewProps) {
           </div>
         );
       }}
-      below={
+      below={!p.failure && showsCount ? <StepCount step={p.step} total={p.total} /> : undefined}
+      // A failed check rests its panel on the bottom edge at its full height.
+      // Squeezed into the strip under the window it was cut off on a short
+      // screen; the window has nothing left to show, so the panel may cover its
+      // lower edge.
+      footer={
         p.failure ? (
           // Its own surface: red text straight on the camera would be lost.
-          // Kept short (lib/liveness-cutout.ts WINDOW_BELOW_KEEP is the room it
-          // is promised under the window): taller, and the button is cut off
-          // on a desktop dialog.
-          <Panel className="space-y-2 p-3">
-            <p className="text-center text-sm font-medium text-destructive" role="alert">
-              {p.failure.message}
-            </p>
+          <Panel className="w-full space-y-2 p-3">
+            <div className="space-y-2 text-center text-sm" role="alert">
+              <p className="font-medium text-destructive">{p.failure.message}</p>
+              {p.failure.note && <AttemptsLeftNotice text={p.failure.note} />}
+            </div>
             <Button className="h-11 w-full" onClick={p.failure.onRetry}>
               {p.failure.retryLabel}
             </Button>
           </Panel>
-        ) : showsCount ? (
-          <StepCount step={p.step} total={p.total} />
-        ) : undefined
+        ) : (
+          <Reassurance visible={settlingIn} />
+        )
       }
-      footer={p.failure ? undefined : <Reassurance visible={settlingIn} />}
     />
   );
 }

@@ -17,7 +17,7 @@ import {
 } from "./submit-helpers";
 import { contactStepFor, expiredContactChannels } from "./contact-recovery";
 import { recoveryStepFor, serverRefusalOf } from "../lib/submit-recovery";
-import { isSessionCancelledError, sessionCancelledMessage } from "../lib/session-cancelled";
+import { sessionEndAction } from "../lib/session-cancelled";
 import type { VerificationStep } from "../types/config";
 import { multiIdWireSlots } from "../lib/multi-id";
 import { keepsIdEvidence } from "../lib/resubmit";
@@ -179,6 +179,8 @@ export function SubmittedStep({ stepOrder = [] }: { stepOrder?: readonly Verific
 			multiSlots
 				? { documentFrontVideoBlob: null, documentBackVideoBlob: null, livenessVideoBlob: state.livenessVideoBlob }
 				: state,
+			// Uploaded when the document was captured, so a resumed session keeps it.
+			multiSlots ? {} : { documentFrontVideo: state.mediaIds.documentFrontVideo, documentBackVideo: state.mediaIds.documentBackVideo },
 		);
 
 		// Whether the liveness recording reached us, and why not when it did
@@ -345,10 +347,11 @@ export function SubmittedStep({ stepOrder = [] }: { stepOrder?: readonly Verific
 			else await submitIndividual(requestId);
 		} catch (err) {
 			setRetryInfo(null);
-			// The organisation cancelled this session: no Try again or Go back can
-			// help. The modal swaps to the cancelled screen, which reports onError.
-			if (isSessionCancelledError(err)) {
-				dispatch({ type: "SET_SESSION_CANCELLED", payload: { message: sessionCancelledMessage(err) } });
+			// The session was cancelled or declined: no Try again or Go back can
+			// help. The modal swaps to its terminal screen, which reports onError.
+			const ended = sessionEndAction(err);
+			if (ended) {
+				dispatch(ended);
 				return;
 			}
 			// A refusal over stale contact proofs is recoverable in-flow: clear

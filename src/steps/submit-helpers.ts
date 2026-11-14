@@ -59,11 +59,21 @@ export async function uploadCaptureVideos(
 		documentBackVideoBlob: Blob | null;
 		livenessVideoBlob: Blob | null;
 	},
+	/**
+	 * Recordings uploaded as soon as they were made (the document step does
+	 * this), so they are on the session's saved progress: used as they are.
+	 * A session resumed later, on a reload or another visit, has no blob in
+	 * memory any more, and without this its recording was never submitted.
+	 */
+	uploaded: { documentFrontVideo?: string; documentBackVideo?: string } = {},
 ): Promise<UploadedVideoIds> {
 	const upload = async (
 		blob: Blob | null,
 		type: 'document_front_video' | 'document_back_video' | 'liveness_video',
 	) => {
+		const already = type === 'document_front_video' ? uploaded.documentFrontVideo
+			: type === 'document_back_video' ? uploaded.documentBackVideo : undefined;
+		if (already) return already;
 		if (!blob) return undefined;
 		try {
 			return await withRetry(() => api.upload(blob, type));

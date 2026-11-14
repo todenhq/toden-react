@@ -48,9 +48,7 @@ export function HostedSessionSync({
     if (resumed) dispatch({ type: 'SET_RESUMED_APPLICATION', payload: resumed });
   }, [sessionId, progress, bootstrap, dispatch]);
 
-  useSessionProgress(api, state, (message) =>
-    dispatch({ type: 'SET_SESSION_CANCELLED', payload: { message } }),
-  );
+  useSessionProgress(api, state, dispatch);
   return null;
 }
 

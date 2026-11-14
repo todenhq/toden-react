@@ -20,6 +20,9 @@ import { PoweredBy } from './PoweredBy';
 import { BrandLogoChip } from './BrandLogoChip';
 import { VisuallyHidden } from './VisuallyHidden';
 import { useVerificationConfig } from '../context/VerificationConfigContext';
+import { useVerificationContext } from '../context/VerificationContext';
+import { SessionDeclinedScreen } from './SessionDeclinedScreen';
+import type { SessionDeclined } from '../lib/session-declined';
 import { useBranding } from '../hooks/useBranding';
 import { themeRootOrDocument, useThemeRoot } from '../lib/sdk-frame-context';
 import { useDeviceHandoff } from '../hooks/useDeviceHandoff';
@@ -122,6 +125,7 @@ export default function DeviceHandoffGate({
     bearerIsParent: config.apiKey.startsWith(HANDOFF_TOKEN_PREFIX),
   });
   const t = useText();
+  const { dispatch } = useVerificationContext();
   const [copied, setCopied] = useState(false);
   const [noCamera, setNoCamera] = useState(false);
   const [leaving, setLeaving] = useState(false);
@@ -161,6 +165,16 @@ export default function DeviceHandoffGate({
     }
   }, [handoff.phase, handoff.verificationId, config]);
 
+  // The workflow declined the phone's session, and core declined the whole
+  // session tree with it. Recorded in the flow state like every other declined
+  // refusal: the modal (always mounted) fires onError('session_declined')
+  // once, and opening the flow afterwards lands on the same declined screen.
+  useEffect(() => {
+    if (handoff.phase === 'declined' && handoff.declined) {
+      dispatch({ type: 'SET_SESSION_DECLINED', payload: handoff.declined });
+    }
+  }, [handoff.phase, handoff.declined, dispatch]);
+
   const copyLink = () => {
     if (!handoff.url) return;
     navigator.clipboard?.writeText(handoff.url).then(
@@ -169,7 +183,8 @@ export default function DeviceHandoffGate({
     );
   };
 
-  const isTerminal = handoff.phase === 'submitted';
+  // Nothing to give back once the phone submitted or the session was declined.
+  const isTerminal = handoff.phase === 'submitted' || handoff.phase === 'declined';
   // A mobile-only notice with handoff off mints nothing, so there is nothing
   // to wait for and nothing to give back.
   const nothingMinted = noHandoff === true;
@@ -192,7 +207,7 @@ export default function DeviceHandoffGate({
     if (nothingMinted) { onLeave(); return; }
     // The mint failed and left nothing to give back.
     if (handoff.phase === 'error' && !handoff.unresolved) { onLeave(); return; }
-    if (leaving || handoff.phase === 'opened' || handoff.phase === 'submitted') return;
+    if (leaving || handoff.phase === 'opened' || handoff.phase === 'submitted' || handoff.phase === 'declined') return;
     setLeaving(true);
     setLeaveError(null);
     void handoff.release()
@@ -247,6 +262,7 @@ export default function DeviceHandoffGate({
           <div className="flex-1 overflow-y-auto p-6 animate-slide-up">
             <GateBody
               phase={handoff.phase}
+              declined={handoff.declined}
               url={handoff.url}
               code={handoff.code}
               noCamera={noCamera}
@@ -257,6 +273,7 @@ export default function DeviceHandoffGate({
               onContinueHere={continueHere}
               onRegenerate={handoff.regenerate}
               onDone={closeGate}
+              canClose={disableClose !== true}
               leaving={leaving}
               leaveError={leaveError}
             />
@@ -278,6 +295,7 @@ export default function DeviceHandoffGate({
 
 interface GateBodyProps {
   phase: ReturnType<typeof useDeviceHandoff>['phase'];
+  declined: SessionDeclined | null;
   url: string | null;
   code: string | null;
   noCamera: boolean;
@@ -290,13 +308,15 @@ interface GateBodyProps {
   onContinueHere: () => void;
   onRegenerate: () => void;
   onDone: () => void;
+  /** False where the gate cannot be dismissed (a mobile-only hosted link). */
+  canClose: boolean;
   leaving: boolean;
   leaveError: string | null;
 }
 
 function GateBody({
-  phase, url, code, noCamera, copied, mobileOnly, noHandoff,
-  onCopyLink, onContinueHere, onRegenerate, onDone, leaving, leaveError,
+  phase, declined, url, code, noCamera, copied, mobileOnly, noHandoff,
+  onCopyLink, onContinueHere, onRegenerate, onDone, leaving, leaveError, canClose,
 }: GateBodyProps) {
   const t = useText();
   // Mobile-only with handoff off: nothing to scan — the user must reopen the
@@ -313,6 +333,12 @@ function GateBody({
         </div>
       </div>
     );
+  }
+
+  // Declined: final, so the only action is Close (SessionDeclinedScreen).
+  if (phase === 'declined' && declined) {
+    // No Close where the gate cannot be dismissed (a mobile-only hosted link).
+    return <SessionDeclinedScreen declined={declined} onClose={canClose ? onDone : undefined} />;
   }
 
   if (phase === 'submitted') {

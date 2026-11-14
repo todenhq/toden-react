@@ -1,7 +1,8 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import type { VerificationApi, HandoffSessionSnapshot } from '../services/api';
+import type { VerificationApi, HandoffSessionSnapshot, HandoffSessionStatusResponse } from '../services/api';
+import type { SessionDeclined } from '../lib/session-declined';
 
 /**
  * Lifecycle of the desktop side of a device handoff:
@@ -10,9 +11,11 @@ import type { VerificationApi, HandoffSessionSnapshot } from '../services/api';
  * - `opened`    — the phone fetched the bootstrap; it's working on the flow
  * - `submitted` — the phone submitted; `verificationId` is available
  * - `expired`   — the 15-min TTL elapsed without a submission
+ * - `declined`  — the workflow declined the phone's session (and with it the
+ *                 whole session tree, this device's included); `declined` set
  * - `error`     — the session couldn't be created
  */
-export type DeviceHandoffPhase = 'creating' | 'waiting' | 'opened' | 'submitted' | 'expired' | 'error';
+export type DeviceHandoffPhase = 'creating' | 'waiting' | 'opened' | 'submitted' | 'expired' | 'declined' | 'error';
 
 export interface DeviceHandoffState {
   phase: DeviceHandoffPhase;
@@ -23,6 +26,9 @@ export interface DeviceHandoffState {
   sessionId: string | null;
   /** Set once the phone submits (`phase === 'submitted'`). */
   verificationId: string | null;
+  /** Set when the session was declined (`phase === 'declined'`). The channel
+   *  is unknown on this device, so it is always null. */
+  declined: SessionDeclined | null;
   error: string | null;
   errorCode?: string;
   /**
@@ -40,6 +46,30 @@ export interface DeviceHandoffState {
 }
 
 const POLL_INTERVAL_MS = 2500;
+
+/**
+ * What one poll answer means for the gate, or null for "keep waiting". The
+ * terminal outcomes (submitted, expired, declined) stop the poll.
+ */
+export type HandoffPollOutcome =
+  | { phase: 'submitted'; verificationId: string | null }
+  | { phase: 'expired' }
+  | { phase: 'opened' }
+  | { phase: 'declined'; declined: SessionDeclined };
+
+export function handoffPollOutcome(s: HandoffSessionStatusResponse): HandoffPollOutcome | null {
+  const status = s.status;
+  if (status === 'submitted') return { phase: 'submitted', verificationId: s.verificationId ?? null };
+  if (status === 'expired') return { phase: 'expired' };
+  if (status === 'declined') {
+    const message = typeof s.message === 'string' && s.message.trim() ? s.message.trim() : null;
+    const reasonCode = typeof s.reasonCode === 'string' && s.reasonCode.trim() ? s.reasonCode.trim() : null;
+    // Which contact step ran out is the phone's knowledge, not this device's.
+    return { phase: 'declined', declined: { message, reasonCode, channel: null } };
+  }
+  if (status === 'opened') return { phase: 'opened' };
+  return null;
+}
 
 /** Preserve the server's machine-readable failure without coupling the hook to an error class. */
 function handoffErrorCode(error: unknown): string | undefined {
@@ -108,6 +138,7 @@ export function useDeviceHandoff(
   const [url, setUrl] = useState<string | null>(null);
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [verificationId, setVerificationId] = useState<string | null>(null);
+  const [declined, setDeclined] = useState<SessionDeclined | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [errorCode, setErrorCode] = useState<string | undefined>();
   const [unresolved, setUnresolved] = useState(false);
@@ -209,7 +240,7 @@ export function useDeviceHandoff(
       if (cancelled) return;
       sessionIdRef.current = null;
       setPhase('creating'); setSessionId(null); setCode(null); setUrl(null);
-      setError(null); setErrorCode(undefined); setUnresolved(false); setVerificationId(null);
+      setError(null); setErrorCode(undefined); setUnresolved(false); setVerificationId(null); setDeclined(null);
     });
 
     if (mintRef.current?.scope !== parentScope || mintRef.current?.nonce !== nonce) {
@@ -248,16 +279,12 @@ export function useDeviceHandoff(
             const s = await api.getHandoffSession(res.sessionId);
             // A released session is no longer this hook's to report on.
             if (cancelled || sessionIdRef.current !== res.sessionId) return;
-            if (s.status === 'submitted') {
-              setVerificationId(s.verificationId ?? null);
-              setPhase('submitted');
-              stopPoll();
-            } else if (s.status === 'expired') {
-              setPhase('expired');
-              stopPoll();
-            } else if (s.status === 'opened') {
-              setPhase('opened');
-            }
+            const outcome = handoffPollOutcome(s);
+            if (!outcome) return;
+            if (outcome.phase === 'submitted') setVerificationId(outcome.verificationId);
+            if (outcome.phase === 'declined') setDeclined(outcome.declined);
+            setPhase(outcome.phase);
+            if (outcome.phase !== 'opened') stopPoll();
           } catch {
             /* transient poll failure — keep polling */
           }
@@ -281,5 +308,5 @@ export function useDeviceHandoff(
     };
   }, [api, mintEnabled, nonce, ensureParentSession, bearerIsParent, parentScope]);
 
-  return { phase, code, url, sessionId, verificationId, error, errorCode, unresolved, regenerate, release };
+  return { phase, code, url, sessionId, verificationId, declined, error, errorCode, unresolved, regenerate, release };
 }

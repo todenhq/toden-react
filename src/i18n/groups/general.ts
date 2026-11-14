@@ -38,6 +38,12 @@ export const GENERAL_TEXTS: TextGroup = {
       default:
         'This verification was cancelled. Contact the organisation that sent it if you think this is a mistake.',
     },
+    { key: 'general.sessionDeclined.title', label: 'Declined session: title', default: 'This verification has ended' },
+    {
+      key: 'general.sessionDeclined.description',
+      label: 'Declined session: description',
+      default: 'This verification has ended. Contact the organisation that sent it if you need help.',
+    },
     { key: 'general.errorBoundary.title', label: 'Unexpected error: title', default: 'Something went wrong' },
     {
       key: 'general.errorBoundary.description',

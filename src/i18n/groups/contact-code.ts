@@ -15,6 +15,19 @@ export const CONTACT_CODE_TEXTS: TextEntry[] = [
     multiline: true,
     placeholders: ['codeLength', 'destination', 'channel'],
   },
+  {
+    key: 'contact.email.codeSentAlphanumeric',
+    label: 'Email: code sent description (letters and digits)',
+    default: 'Enter the {codeLength}-character code we sent to {destination}.',
+    placeholders: ['codeLength', 'destination'],
+  },
+  {
+    key: 'contact.phone.codeSentAlphanumeric',
+    label: 'Phone: code sent description (letters and digits)',
+    default: 'Enter the {codeLength}-character code we sent to {destination} by {channel}.',
+    multiline: true,
+    placeholders: ['codeLength', 'destination', 'channel'],
+  },
   { key: 'contact.code.label', label: 'Code: field label', default: 'Verification code' },
   { key: 'contact.code.paste', label: 'Code: paste link', default: 'Paste code' },
   {
@@ -32,6 +45,7 @@ export const CONTACT_CODE_TEXTS: TextEntry[] = [
     placeholders: ['channel'],
   },
   { key: 'contact.verifyCode', label: 'Verify code button', default: 'Verify code' },
+  { key: 'contact.code.sendNew', label: 'Code used up: send a new code button', default: 'Send a new code' },
   {
     key: 'contact.verified',
     label: 'Verified notice',
@@ -60,6 +74,12 @@ export const CONTACT_CODE_TEXTS: TextEntry[] = [
     default: 'That does not look valid. Please check and try again.',
   },
   {
+    key: 'contact.error.corporateEmailRequired',
+    label: 'Error: work email required',
+    default: 'Use your work email address. Personal email services such as Gmail are not accepted here.',
+    multiline: true,
+  },
+  {
     key: 'contact.error.rateLimited',
     label: 'Error: too many codes',
     default: 'Too many codes requested. Please wait a while and try again.',
@@ -70,6 +90,23 @@ export const CONTACT_CODE_TEXTS: TextEntry[] = [
     key: 'contact.error.network',
     label: 'Error: network',
     default: 'Network error. Check your connection and try again.',
+  },
+  {
+    key: 'contact.declined.email.title',
+    label: 'Declined after too many attempts: email title',
+    default: "We couldn't verify your email address",
+  },
+  {
+    key: 'contact.declined.phone.title',
+    label: 'Declined after too many attempts: phone title',
+    default: "We couldn't verify your phone number",
+  },
+  {
+    key: 'contact.declined.description',
+    label: 'Declined after too many attempts: description',
+    default:
+      'The code was entered incorrectly too many times, so this verification has ended. Contact the organisation that sent it if you need help.',
+    multiline: true,
   },
   { key: 'contact.error.generic', label: 'Error: something went wrong', default: 'Something went wrong. Please try again.' },
 ];

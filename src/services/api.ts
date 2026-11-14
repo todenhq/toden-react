@@ -4,6 +4,7 @@ import { uploadDeviceIdHeader } from '../lib/upload-device-id';
 import { appendUploadSession } from '../lib/upload-session';
 import { compactDrawing, type SignatureDrawing } from '../lib/signature';
 import { businessSearchQuery, type BusinessSearchParams } from '../lib/business-search';
+import { livenessFailedResult, type LivenessFailedResult } from '../lib/liveness-attempts';
 
 export class VerificationApiError extends Error {
   constructor(
@@ -493,6 +494,8 @@ export interface WorkflowConfigPayload {
   /** Presence Intelligence method: gestures (default) | flash | both. */
   livenessMode?: string;
   flashSequenceLength?: number;
+  /** Maximum liveness attempts, 1 to 3, or false for none; absent = 3. */
+  maxLivenessAttempts?: number | false;
   /** Light theme while the liveness camera is on. On unless `false`. */
   livenessBrightScreen?: boolean;
   /** Show the captured selfie, with Retake and Continue, before moving on.
@@ -522,13 +525,26 @@ export interface WorkflowConfigPayload {
   /** Custom copy by language then key (see i18n/). */
   texts?: Record<string, Record<string, string>>;
   /** Contact verification step configurations (email/phone OTP). */
-  emailVerification?: { enabled?: boolean; required?: boolean; codeLength?: number; maxAttempts?: number; inputStyle?: 'segmented' | 'text' };
+  emailVerification?: {
+    enabled?: boolean;
+    required?: boolean;
+    codeLength?: number;
+    maxAttempts?: number;
+    inputStyle?: 'segmented' | 'text';
+    alphanumericCode?: boolean;
+    /** Decline the session when a code's attempts run out (default false: the applicant can request a new code). */
+    declineOnLastAttempt?: boolean;
+    corporateOnly?: boolean;
+  };
   phoneVerification?: {
     enabled?: boolean;
     required?: boolean;
     codeLength?: number;
     maxAttempts?: number;
     inputStyle?: 'segmented' | 'text';
+    alphanumericCode?: boolean;
+    /** Decline the session when a code's attempts run out (default false: the applicant can request a new code). */
+    declineOnLastAttempt?: boolean;
     channels?: Array<'sms' | 'whatsapp'>;
     defaultCountry?: string;
   };
@@ -634,6 +650,8 @@ export interface HandoffSessionSnapshot {
   /** Presence Intelligence method: gestures (default) | flash | both. */
   livenessMode?: string;
   flashSequenceLength?: number;
+  /** Maximum liveness attempts, 1 to 3, or false for none; absent = 3. */
+  maxLivenessAttempts?: number | false;
   /** Light theme while the liveness camera is on. On unless `false`. */
   livenessBrightScreen?: boolean;
   /** Show the captured selfie, with Retake and Continue, before moving on.
@@ -663,13 +681,26 @@ export interface HandoffSessionSnapshot {
   /** Custom copy by language then key (see i18n/). */
   texts?: Record<string, Record<string, string>>;
   /** Contact verification step configurations (email/phone OTP). */
-  emailVerification?: { enabled?: boolean; required?: boolean; codeLength?: number; maxAttempts?: number; inputStyle?: 'segmented' | 'text' };
+  emailVerification?: {
+    enabled?: boolean;
+    required?: boolean;
+    codeLength?: number;
+    maxAttempts?: number;
+    inputStyle?: 'segmented' | 'text';
+    alphanumericCode?: boolean;
+    /** Decline the session when a code's attempts run out (default false: the applicant can request a new code). */
+    declineOnLastAttempt?: boolean;
+    corporateOnly?: boolean;
+  };
   phoneVerification?: {
     enabled?: boolean;
     required?: boolean;
     codeLength?: number;
     maxAttempts?: number;
     inputStyle?: 'segmented' | 'text';
+    alphanumericCode?: boolean;
+    /** Decline the session when a code's attempts run out (default false: the applicant can request a new code). */
+    declineOnLastAttempt?: boolean;
     channels?: Array<'sms' | 'whatsapp'>;
     defaultCountry?: string;
   };
@@ -729,13 +760,17 @@ export interface CreateHandoffSessionResponse {
   expiresAt: string;
 }
 
-export type HandoffSessionStatus = 'pending' | 'opened' | 'submitted' | 'expired';
+export type HandoffSessionStatus = 'pending' | 'opened' | 'submitted' | 'expired' | 'declined';
 
 /** Response from `GET /api/v1/session/:sessionId` (desktop poll, no PII). */
 export interface HandoffSessionStatusResponse {
   status: HandoffSessionStatus;
   verificationId?: string;
   verificationStatus?: VerificationStatusResponse['status'];
+  /** Why the session was declined (`contact_attempts_exceeded`), on `DECLINED`. */
+  reasonCode?: string;
+  /** The server's own sentence for a declined session, when it sends one. */
+  message?: string;
 }
 
 /** Response from `GET /api/v1/session/by-token/:token/bootstrap` (phone side). */
@@ -1175,6 +1210,25 @@ export function createVerificationApi(baseUrl: string, apiKey: string) {
       return request('/contact/check', { method: 'POST', body: JSON.stringify(body) });
     },
 
+    // ── Maximum liveness attempts (lib/liveness-attempts.ts) ───────────────
+
+    /**
+     * Report one failed liveness check, so a workflow's `maxLivenessAttempts`
+     * can decline the attempt at the limit. Call once per failure and never
+     * retry. At the limit the server answers 409 `session_declined` (reason
+     * `liveness_attempts_exceeded`), thrown as a {@link VerificationApiError}
+     * exactly like the contact calls (lib/session-declined.ts reads it).
+     */
+    async livenessFailed(body: {
+      /** The flow's session, when it has one (the server reads its workflow's limit). */
+      sessionId?: string;
+      /** The flow's ISO-2 country, for the liveness price at the limit. */
+      country?: string;
+    }): Promise<LivenessFailedResult> {
+      const raw = await request<unknown>('/liveness/failed', { method: 'POST', body: JSON.stringify(body) });
+      return livenessFailedResult(raw);
+    },
+
     /** Whether the email has a saved address this flow could take. */
     async addressBookLookup(email: string, presence: boolean): Promise<{ recognised: boolean }> {
       return request('/address-book/lookup', { method: 'POST', body: JSON.stringify({ email, presence }) });
@@ -1216,7 +1270,7 @@ export function createVerificationApi(baseUrl: string, apiKey: string) {
       return request<{ results: AddressSearchHit[] }>(`/address/search?${params}`);
     },
 
-    /** The street line for a pin ("11 Bassey Street"), for the summary card
+    /** The street line for a pin ("11 Adebayo Street"), for the summary card
      *  after Use-my-location or a drag. Display only. */
     async addressReverse(lat: number, lng: number): Promise<AddressReverseResult> {
       return request<AddressReverseResult>(

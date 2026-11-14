@@ -69,6 +69,7 @@ import {
   ShieldCheck as HugeShieldCheck,
   SlidersHorizontalIcon as HugeSlidersHorizontalIcon,
   Smartphone as HugeSmartphone,
+  SmartphoneNfcIcon as HugeSmartphoneNfcIcon,
   Stamp as HugeStamp,
   SparklesIcon as HugeSparklesIcon,
   SunIcon as HugeSunIcon,
@@ -188,6 +189,7 @@ export const SearchX = createAppIcon(HugeSearchX, 'SearchX');
 export const ShieldCheck = createAppIcon(HugeShieldCheck, 'ShieldCheck');
 export const SlidersHorizontal = createAppIcon(HugeSlidersHorizontalIcon, 'SlidersHorizontal');
 export const Smartphone = createAppIcon(HugeSmartphone, 'Smartphone');
+export const Nfc = createAppIcon(HugeSmartphoneNfcIcon, 'Nfc');
 export const Stamp = createAppIcon(HugeStamp, 'Stamp');
 export const Sparkles = createAppIcon(HugeSparklesIcon, 'Sparkles');
 export const Sun = createAppIcon(HugeSunIcon, 'Sun');

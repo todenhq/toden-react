@@ -6,6 +6,7 @@ import { createVerificationApi, type CompletedSessionSummary, type HandoffBootst
 import { HostedCompleted } from './hosted/HostedCompleted';
 import { HostedFlow } from './hosted/HostedFlow';
 import { HostedLoadingScreen, HostedScreen } from './hosted/HostedScreen';
+import { HostedDeclined } from './hosted/HostedDeclined';
 import { HANDOFF_TOKEN_PREFIX } from './hosted/token';
 import { SdkFrame } from './lib/sdk-frame';
 import type { HostedVerificationProps } from './hosted/hosted-props';
@@ -17,6 +18,9 @@ import {
   summaryIsCancelled,
   SESSION_CANCELLED_MESSAGE,
 } from './lib/session-cancelled';
+import { sessionDeclinedCopy, sessionDeclinedFrom, type SessionDeclined } from './lib/session-declined';
+import { SubmitSuccessScreen } from './steps/SubmittedScreens';
+import { defaultText } from './i18n/translate';
 import { VerificationError } from './types/verification';
 
 export type { HostedVerificationProps, HostedVerificationReadyInfo } from './hosted/hosted-props';
@@ -50,7 +54,8 @@ export function HostedVerification({
     setFaceMeshOrigin({ serverUrl });
     return createVerificationApi(serverUrl, `${HANDOFF_TOKEN_PREFIX}${token}`);
   });
-  const [phase, setPhase] = useState<'loading' | 'ready' | 'completed' | 'cancelled' | 'error'>('loading');
+  const [phase, setPhase] = useState<'loading' | 'ready' | 'completed' | 'cancelled' | 'declined' | 'error'>('loading');
+  const [declined, setDeclined] = useState<SessionDeclined | null>(null);
   const [bootstrap, setBootstrap] = useState<HandoffBootstrapResponse | null>(null);
   const [summary, setSummary] = useState<CompletedSessionSummary | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -64,6 +69,19 @@ export function HostedVerification({
       setPhase('cancelled');
       try {
         onError?.(new VerificationError('session_cancelled', message));
+      } catch {
+        /* a host's handler must never break the page */
+      }
+    };
+    // Declined by the server (a one-time code ran out of attempts on a step
+    // set to decline): its own final screen, reported to the host once, the
+    // same way. Refused at the bootstrap, nobody knows which contact step it
+    // was, so the screen says the verification has ended.
+    const reportDeclined = (refusal: SessionDeclined) => {
+      setDeclined(refusal);
+      setPhase('declined');
+      try {
+        onError?.(new VerificationError('session_declined', sessionDeclinedCopy(refusal, defaultText).description));
       } catch {
         /* a host's handler must never break the page */
       }
@@ -120,6 +138,11 @@ export function HostedVerification({
         }
         if (isSessionCancelledError(err)) {
           reportCancelled(sessionCancelledMessage(err) ?? SESSION_CANCELLED_MESSAGE);
+          return;
+        }
+        const refusal = sessionDeclinedFrom(err);
+        if (refusal) {
+          reportDeclined(refusal);
           return;
         }
         setError(err instanceof Error ? err.message : 'This verification link is no longer valid.');
@@ -179,6 +202,21 @@ export function HostedVerification({
         <h1 className="text-lg font-semibold font-heading">This verification was cancelled</h1>
         <p className="max-w-xs text-center text-sm text-muted-foreground">{error ?? SESSION_CANCELLED_MESSAGE}</p>
       </HostedScreen>,
+    );
+  }
+
+  if (phase === 'declined' && declined) {
+    // In the flow's own modal, opening on its declined screen (hosted/
+    // HostedDeclined.tsx), so a reload looks like the moment it ended.
+    return frame(
+      <HostedDeclined
+        token={token}
+        api={api}
+        declined={declined}
+        appearance={screenAppearance}
+        embedded={embedded}
+        onClose={onClose}
+      />,
     );
   }
 

@@ -139,6 +139,11 @@ export function withPreviewMocks(api: VerificationApi): VerificationApi {
       return { verified: true, token: 'preview_contact_proof' };
     },
 
+    // A failed liveness check in the preview is never counted: no limit applies.
+    async livenessFailed() {
+      return { limited: false as const };
+    },
+
     async createHandoffSession(): Promise<never> {
       throw new Error('Device handoff is unavailable in preview mode.');
     },

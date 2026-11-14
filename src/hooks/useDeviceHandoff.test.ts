@@ -1,7 +1,9 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, it, expect, vi } from 'vitest';
-import { canMintDeviceHandoff, mintLeftOwnershipOpen, serverRefused } from './useDeviceHandoff';
+import { canMintDeviceHandoff, handoffPollOutcome, mintLeftOwnershipOpen, serverRefused } from './useDeviceHandoff';
+import { sessionDeclinedCopy } from '../lib/session-declined';
+import { defaultText } from '../i18n/translate';
 
 // The mint guard, tested as the logic it is rather than through a renderer.
 //
@@ -178,5 +180,40 @@ describe('the gate wiring', () => {
       'utf8',
     );
     expect(sheet).toContain('ensureParentSession: config.ensureHandoffParent');
+  });
+});
+
+// The desktop gate polls GET /session/:id. A session the workflow declined
+// (a phone's contact code ran out of attempts) answers status 'declined' with
+// a reasonCode; the gate must stop waiting and show the declined screen.
+describe('the handoff poll', () => {
+  it('ends on a declined session, with an unknown channel', () => {
+    expect(handoffPollOutcome({ status: 'declined', reasonCode: 'contact_attempts_exceeded' })).toEqual({
+      phase: 'declined',
+      declined: { message: null, reasonCode: 'contact_attempts_exceeded', channel: null },
+    });
+  });
+
+  it('words a declined poll as ended, with the contact body', () => {
+    const outcome = handoffPollOutcome({ status: 'declined', reasonCode: 'contact_attempts_exceeded' });
+    if (outcome?.phase !== 'declined') throw new Error('expected declined');
+    expect(sessionDeclinedCopy(outcome.declined, defaultText)).toEqual({
+      title: 'This verification has ended',
+      description:
+        'The code was entered incorrectly too many times, so this verification has ended. Contact the organisation that sent it if you need help.',
+    });
+    const other = handoffPollOutcome({ status: 'declined' });
+    if (other?.phase !== 'declined') throw new Error('expected declined');
+    expect(sessionDeclinedCopy(other.declined, defaultText).title).toBe('This verification has ended');
+  });
+
+  it('keeps the other branches as they were', () => {
+    expect(handoffPollOutcome({ status: 'submitted', verificationId: 'ver_1' })).toEqual({
+      phase: 'submitted',
+      verificationId: 'ver_1',
+    });
+    expect(handoffPollOutcome({ status: 'expired' })).toEqual({ phase: 'expired' });
+    expect(handoffPollOutcome({ status: 'opened' })).toEqual({ phase: 'opened' });
+    expect(handoffPollOutcome({ status: 'pending' })).toBeNull();
   });
 });

@@ -150,6 +150,8 @@ export interface VerificationConfigValue {
   livenessMode?: 'gestures' | 'flash' | 'both' | 'passive';
   /** Flash-liveness sequence length (colours) for flash/both. 2–5, default 4. */
   flashSequenceLength?: number;
+  /** Maximum liveness attempts, 1 to 3, or false for none; absent = 3 (lib/liveness-attempts.ts). */
+  maxLivenessAttempts?: number | false;
   /** Light theme while the liveness camera is on. On unless `false`. */
   livenessBrightScreen?: boolean;
   /** Show the captured selfie, with Retake and Continue, before moving on.
@@ -531,6 +533,7 @@ export function VerificationConfigProvider({ children, apiOverride, serverConfig
       config.enableLiveness,
       config.livenessMode,
       config.flashSequenceLength,
+      config.maxLivenessAttempts,
       config.livenessBrightScreen,
       config.selfieReview,
       config.deviceIntelligence,

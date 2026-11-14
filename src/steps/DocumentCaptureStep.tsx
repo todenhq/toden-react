@@ -52,6 +52,11 @@ import { inlineGuideBand } from "../lib/inline-layout";
 import { bleedCropRect, coverVisibleRegion } from "../lib/document-corners";
 import { CORNER_HINTS, withCornerGuidance } from "../lib/document-hints";
 import { cropVideoFrame } from "../lib/video-crop";
+import {
+	emptyRecordingCaptures,
+	isCurrentCapture,
+	renewCapture,
+} from "../lib/document-recordings";
 import { shortDocumentLabel } from "../lib/document-label";
 import { specimenTitle } from "../lib/document-specimen";
 import { regionCountryName } from "../lib/regions";
@@ -243,8 +248,6 @@ export function DocumentCaptureStep() {
 	// The "side" of each recording is captured at start time so the onstop
 	// handler dispatches to the correct slot (front vs back).
 	const recorderRef = useRef<MediaRecorder | null>(null);
-	const docChunksRef = useRef<Blob[]>([]);
-	const docMimeRef = useRef("video/webm");
 	const recordingSideRef = useRef<"front" | "back" | null>(null);
 
 	// Every camera surface below (the primers, the stream, detection, the light
@@ -518,30 +521,44 @@ export function DocumentCaptureStep() {
 	// Video recording — starts when camera stream is available
 	// ---------------------------------------------------------------------------
 
+	// Whether this run takes several IDs, read when a recording stops.
+	const multiIdRef = useRef(false);
+	multiIdRef.current = multiIdPlan(config, state, config.serverConfig.idTypes) !== null;
+	// Which capture of each side is current (lib/document-recordings.ts): an
+	// upload that lands after that side was captured again is dropped. Per side,
+	// so starting the back's recording never drops the front's upload in flight.
+	const recordingTokenRef = useRef(emptyRecordingCaptures());
+
 	useEffect(() => {
 		if (!camera.stream) return;
 
-		docChunksRef.current = [];
 		const created = createVideoRecorder(camera.stream, DOCUMENT_VIDEO_BITRATE, microphoneRef.current);
 		if (!created) return; // MediaRecorder not supported in this browser
 		const { recorder, mimeType } = created;
-		docMimeRef.current = mimeType;
+		// This recording's own chunks. Shared between recordings, the last chunk
+		// of a discarded one could land in the next one's file.
+		let chunks: Blob[] = [];
 
 		// Capture which side this recording is for. The recorder is created when the
 		// camera stream becomes available, which only happens while we're in the
 		// 'front' or 'back' capture phases.
 		const sideAtStart: "front" | "back" = phase === "back" ? "back" : "front";
 		recordingSideRef.current = sideAtStart;
+		// A new capture of this side: whatever recording it had before (an
+		// earlier take, or one restored with a resumed session) is not this one's.
+		const token = renewCapture(recordingTokenRef.current, sideAtStart);
+		dispatch({ type: "CLEAR_DOCUMENT_VIDEO", payload: sideAtStart });
 
 		recorder.ondataavailable = (e) => {
-			if (e.data.size > 0) docChunksRef.current.push(e.data);
+			if (e.data.size > 0) chunks.push(e.data);
 		};
 		recorder.onstop = () => {
-			if (docChunksRef.current.length > 0) {
-				const blob = new Blob(docChunksRef.current, {
-					type: docMimeRef.current,
+			if (!isCurrentCapture(recordingTokenRef.current, sideAtStart, token)) return;
+			if (chunks.length > 0) {
+				const blob = new Blob(chunks, {
+					type: mimeType,
 				});
-				docChunksRef.current = [];
+				chunks = [];
 				logCaptureSize(`document ${sideAtStart} video`, blob);
 				dispatch({
 					type:
@@ -550,6 +567,24 @@ export function DocumentCaptureStep() {
 						:	"SET_DOCUMENT_FRONT_VIDEO",
 					payload: blob,
 				});
+				// Uploaded now, as the photos are, so the recording is on the
+				// session's saved progress: a session resumed later (a reload, a
+				// return the next day) has no blob in memory, and the recording
+				// was lost. Best effort; the submit uploads the blob if this
+				// fails. A multi-ID run's recordings are per ID and go at submit.
+				if (!multiIdRef.current) {
+					const type = sideAtStart === "back" ? "document_back_video" : "document_front_video";
+					void withRetry(() => config.api.upload(blob, type)).then(
+						(mediaId) => {
+							if (!isCurrentCapture(recordingTokenRef.current, sideAtStart, token)) return;
+							dispatch({
+								type: "SET_MEDIA_ID",
+								payload: { mediaType: sideAtStart === "back" ? "documentBackVideo" : "documentFrontVideo", mediaId },
+							});
+						},
+						() => undefined,
+					);
+				}
 			}
 		};
 		recorder.start(200);
@@ -563,7 +598,8 @@ export function DocumentCaptureStep() {
 				return;
 			}
 			// Otherwise the user navigated away mid-recording — discard.
-			docChunksRef.current = [];
+			chunks = [];
+			recorder.ondataavailable = null;
 			recorder.onstop = null;
 			try {
 				recorder.stop();
@@ -582,7 +618,7 @@ export function DocumentCaptureStep() {
 		const r = recorderRef.current;
 		if (!r) return;
 		if (!save) {
-			docChunksRef.current = [];
+			r.ondataavailable = null;
 			r.onstop = null;
 		}
 		if (r.state !== "inactive") {
@@ -652,6 +688,12 @@ export function DocumentCaptureStep() {
 	function storeCapture(base64: string, source: "camera" | "upload") {
 		if (phase !== "front" && phase !== "back") return;
 		sourcesRef.current[phase] = source;
+		// A photo from the device has no recording: drop any the side still had,
+		// and any upload of one still in flight.
+		if (source === "upload") {
+			renewCapture(recordingTokenRef.current, phase);
+			dispatch({ type: "CLEAR_DOCUMENT_VIDEO", payload: phase });
+		}
 		if (phase === "front") {
 			setFrontPreview(base64);
 			dispatch({ type: "SET_DOCUMENT_FRONT", payload: base64 });
@@ -889,6 +931,11 @@ export function DocumentCaptureStep() {
 		const api = config.api;
 		const onRetry = (attempt: number, total: number) =>
 			setRetryInfo({ attempt, total });
+		// A one-sided document has no back: a back left from a two-sided ID
+		// picked earlier in the flow must not be submitted with it.
+		if (!isTwoSided && (state.documentBackImage || state.mediaIds.documentBack || state.mediaIds.documentBackVideo)) {
+			dispatch({ type: "CLEAR_DOCUMENT_BACK" });
+		}
 
 		try {
 			// Convert base64 to blob for upload
@@ -952,6 +999,9 @@ export function DocumentCaptureStep() {
 		frontPreview,
 		backPreview,
 		isTwoSided,
+		state.documentBackImage,
+		state.mediaIds.documentBack,
+		state.mediaIds.documentBackVideo,
 		config,
 		dispatch,
 		checkCapture,
@@ -980,6 +1030,8 @@ export function DocumentCaptureStep() {
 		stopHandover();
 		clearCaptureCheck();
 		stopDocRecorder(false);
+		// The old recording's upload may still be in flight: it is not the next photo's.
+		renewCapture(recordingTokenRef.current, "front");
 		setCaptureZoom(null);
 		setFrontPreview(null);
 		setUploadError(null);
@@ -995,6 +1047,7 @@ export function DocumentCaptureStep() {
 		stopHandover();
 		clearCaptureCheck();
 		stopDocRecorder(false);
+		renewCapture(recordingTokenRef.current, "back");
 		setCaptureZoom(null);
 		setBackPreview(null);
 		setUploadError(null);

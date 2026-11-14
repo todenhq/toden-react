@@ -11,7 +11,10 @@
 // never reach the generic "Something went wrong / Try again" screen. These
 // helpers are the one place that recognises it. Duck-typed on `code` rather
 // than `instanceof VerificationApiError`, so this module stays import-free (the API
-// client depends on it, not the other way round).
+// client depends on it, not the other way round). Its one import is the
+// declined twin (lib/session-declined.ts), import-free in the same way.
+
+import { sessionDeclinedFrom, isSessionDeclinedError, type SessionDeclined } from './session-declined';
 
 /** The server's error token for a refused, cancelled session. */
 export const SESSION_CANCELLED_CODE = 'session_cancelled';
@@ -66,23 +69,46 @@ export function isCancelledStatus(status: string | null | undefined): boolean {
 /**
  * What a failed session start means for the flow. A start is otherwise
  * best-effort (resuming is a convenience, verifying is not conditional on it),
- * so every other failure is ignored and the flow carries on. A cancelled
- * session is the exception: carrying on would walk the applicant through
- * capture steps whose submission the server will refuse.
+ * so every other failure is ignored and the flow carries on. A cancelled or
+ * declined session is the exception: carrying on would walk the applicant
+ * through capture steps whose submission the server will refuse.
  */
-export type SessionStartFailure = { kind: 'cancelled'; message: string | null } | { kind: 'ignore' };
+export type SessionStartFailure =
+  | { kind: 'cancelled'; message: string | null }
+  | { kind: 'declined'; declined: SessionDeclined }
+  | { kind: 'ignore' };
 
 export function classifySessionStartFailure(err: unknown): SessionStartFailure {
-  return isSessionCancelledError(err)
-    ? { kind: 'cancelled', message: sessionCancelledMessage(err) }
-    : { kind: 'ignore' };
+  if (isSessionCancelledError(err)) return { kind: 'cancelled', message: sessionCancelledMessage(err) };
+  const declined = sessionDeclinedFrom(err);
+  return declined ? { kind: 'declined', declined } : { kind: 'ignore' };
 }
 
 /**
  * Whether a failed progress save should stop the flow. Saves are best-effort
- * and a failure is normally retried on the next change; a cancelled session
- * refuses every save, so retrying could only fail again.
+ * and a failure is normally retried on the next change; a cancelled or
+ * declined session refuses every save, so retrying could only fail again.
  */
 export function progressSaveStopsFlow(err: unknown): boolean {
-  return isSessionCancelledError(err);
+  return isSessionCancelledError(err) || isSessionDeclinedError(err);
+}
+
+/**
+ * The reducer action that ends the flow for a refusal, or null when the error
+ * is anything else. `channel` names the contact step that was refused, when
+ * one was, so the declined screen can say which detail could not be verified.
+ */
+export type SessionEndAction =
+  | { type: 'SET_SESSION_CANCELLED'; payload: { message: string | null } }
+  | { type: 'SET_SESSION_DECLINED'; payload: SessionDeclined };
+
+export function sessionEndAction(
+  err: unknown,
+  channel: SessionDeclined['channel'] = null,
+): SessionEndAction | null {
+  if (isSessionCancelledError(err)) {
+    return { type: 'SET_SESSION_CANCELLED', payload: { message: sessionCancelledMessage(err) } };
+  }
+  const declined = sessionDeclinedFrom(err, channel);
+  return declined ? { type: 'SET_SESSION_DECLINED', payload: declined } : null;
 }

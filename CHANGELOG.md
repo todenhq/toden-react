@@ -1,5 +1,39 @@
 # Changelog
 
+## 4.2.0
+
+No breaking changes: upgrade with `npm install @toden/react@4.2.0`.
+
+**Deploy note for Toden:** the letters-and-digits code and the work-address message need the matching server release, which sends `alphanumericCode` in the workflow and the `corporate_email_required` reason. Until then the code field stays digits only and a refused address shows the existing message. The declined screen likewise needs the server release that adds `declineOnLastAttempt` and the `session_declined` refusal, and the limit on liveness attempts needs the server release that adds `maxLivenessAttempts` and `/api/kyc/liveness/failed`. Until then no failure is counted and Try Again works as before.
+
+### Added
+
+- **Codes with letters as well as digits.** When a workflow's email or phone verification turns on `alphanumericCode`, the code field accepts letters and digits, upper-cases them, and opens a capitalising keyboard with autocorrect off. Paste and one-time-code autofill work the same way, and the instruction asks for the "6-character code". Digits-only codes are unchanged.
+- **A clear message for work-address-only workflows.** When email verification takes work addresses only (`corporateOnly`) and the person enters a free-provider address, the SDK asks for a work email instead of showing a general error.
+- **A screen for a session declined after too many incorrect codes.** A workflow whose email or phone verification sets the new `declineOnLastAttempt` declines the session when a code's attempts run out, and the server then refuses the session with `409 session_declined`. The SDK now ends the flow on a declined screen ("We couldn't verify your email address" or "We couldn't verify your phone number", or "This verification has ended" when the refusal comes at the hosted link) with the server's message and one Close button, and fires `onError` once with the new `session_declined` code, the same way a cancelled session does. The "continue on your phone" screen on a computer stops waiting and shows the same declined screen when the phone's session is declined. It never shows "Something went wrong / Try again".
+- **A limit on liveness attempts.** On by default: 3 failed face checks, unless the workflow sets `maxLivenessAttempts` to 1 or 2, or turns the limit off with `false`. Each failed face check is reported to the server, and the failure panel adds how many attempts are left ("1 attempt left." or "2 attempts left.") under its message, shown as a small warning: an amber pill with a warning icon. At the limit the server declines the session (`session_declined` with reason `liveness_attempts_exceeded`), and the flow ends on the declined screen ("We couldn't verify your face") with the server's message and one Close button, firing `onError` once. A camera that cannot start, a detector that cannot load and a failed upload are not counted, and if the report cannot reach the server Try Again works as before. The builder preview never reports.
+
+### Fixed
+
+- **A used-up code can no longer be typed into.** Once a code's last attempt is spent (`attemptsRemaining: 0`, or a later `too_many_attempts`), the code field, paste and auto-submit are disabled, the message asks for a new code, and the main button becomes "Send a new code". Sending one clears the field and turns it back on. Before, the field stayed open and every entry just failed.
+- **Document recordings survive a resumed session.** The recording of each document side was held in the browser until submission, so a session finished later (a reload, or coming back the next day) submitted the photos without it. It is now uploaded as soon as it is made, with the photos, as the React Native SDK already does.
+- **Code errors are easier to see.** A wrong, expired or used-up code now shows in an alert box under the field, read out by screen readers, instead of a line of small red text.
+- **A wrong code clears the field**, so the next try starts empty.
+- **Enter sends.** Pressing Enter in the email, phone or code field does what the main button does: sends the code, or checks it.
+- **Code boxes the size of the mobile SDKs'.** The boxes share the field's width at the React Native and Flutter shape and stop at 56px wide, so a short code or a desktop screen keeps phone-sized boxes, centred.
+- **No horizontal scroll bar under the code field.** The field's hidden input was wider than the boxes, to make room for a password manager's icon.
+- **No Close button that does nothing.** A full-page hosted link that ends on the cancelled or declined screen has nothing to close to, so it no longer shows Close. Inside your app, Close works as before.
+- **A failed face check's message is never cut off.** "Time's up. Let's try again." and Try Again now rest on the bottom edge at their full height. They were squeezed into the strip under the camera window, which on a short screen cut off the top of the panel.
+- **A document side is submitted with its own recording, or none.** A recording uploaded for an earlier capture of a side could still be submitted after that side was captured again: one restored with a resumed session took the place of the new recording, and a photo chosen from the device was submitted beside it. A new capture of a side now drops the side's earlier recording, and an upload that finishes after its side was retaken is dropped. A back captured for a two-sided ID picked earlier is no longer submitted with a one-sided one.
+
+### Changed
+
+- **Your organisation's logo by default, and a workflow's "None" wins.** With no `appearance.logo` from your app or the workflow, the flow shows your organisation's logo from the dashboard, as `'default'` does (it showed none). An empty `appearance.logo` (`''`) means no logo, and the workflow's value wins over the logo your app sets, as its theme does.
+- **The flow follows the device's light or dark setting by default.** When neither the workflow nor your app sets a theme, the flow now opens in the applicant's device setting (`system`). It used to open in whatever mode the host page was in. Set `appearance.theme` (or the workflow's theme) to `light` or `dark` to pin it.
+- **The chip step's preview shows the read applicants see.** The web SDK never reads a chip, but the builder preview of the step now plays the read the way the mobile SDKs show it: "Waiting for the chip", then each step ticking off. It no longer shows a pulsing "Waiting for your document…" line, or a note about desktops and phones without NFC, which was for the organisation, not the applicant (the builder's chip panel says it now). The `nfc.deviceNote` text is gone; a value set for it is ignored. New defaults, shared with the mobile SDKs: `nfc.description` "Hold your document flat against the back of your phone until it's read.", `nfc.waiting` "Waiting for the chip", `nfc.skip` "Continue without the chip".
+- **The chip step's preview opens on the explanation the phones now show** (laid out like the address-monitoring explanation: how to hold a passport or card, then Continue) before it plays the read.
+
+
 ## 4.1.0
 
 No API changes: upgrade with `npm install @toden/react@4.1.0`.

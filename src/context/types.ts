@@ -245,6 +245,13 @@ export interface VerificationState {
    */
   sessionCancelled: { message: string | null } | null;
   /**
+   * Set when the server refused this session as DECLINED (a contact code ran
+   * out of attempts on a step with `declineOnLastAttempt`; lib/session-declined.ts).
+   * Terminal for this run, exactly like `sessionCancelled`: the modal swaps to
+   * the declined screen and nothing else is saved or submitted.
+   */
+  sessionDeclined: import('../lib/session-declined').SessionDeclined | null;
+  /**
    * A KYB application whose business half already committed, resumed before
    * the applicant's own verification went through (lib/resumed-application.ts).
    * The submitting screen replays the business submission under its original
@@ -382,7 +389,7 @@ export interface VerificationState {
     city?: string;
     state?: string;
     postcode?: string;
-    /** The pin's human-readable line ("11 Bassey Street, Calabar") — from the
+    /** The pin's human-readable line ("11 Adebayo Street, Calabar") — from the
      *  search pick or a reverse geocode. Shown in the flow AND sent with the
      *  submission as the applicant-confirmed line: the server prefers it for
      *  the composed address over its own reverse geocode, whose OSM coverage
@@ -463,6 +470,7 @@ export type VerificationAction =
   | { type: 'OPEN_MODAL' }
   | { type: 'SET_SESSION_ID'; payload: string }
   | { type: 'SET_SESSION_CANCELLED'; payload: { message: string | null } }
+  | { type: 'SET_SESSION_DECLINED'; payload: import('../lib/session-declined').SessionDeclined }
   | { type: 'SET_RESUMED_APPLICATION'; payload: import('../lib/resumed-application').ResumedApplication | null }
   | {
       type: 'RESTORE_PROGRESS';
@@ -510,6 +518,8 @@ export type VerificationAction =
   // Video blobs
   | { type: 'SET_DOCUMENT_FRONT_VIDEO'; payload: Blob }
   | { type: 'SET_DOCUMENT_BACK_VIDEO'; payload: Blob }
+  // A new capture of the side began: its earlier recording (held or uploaded) is not this capture's.
+  | { type: 'CLEAR_DOCUMENT_VIDEO'; payload: 'front' | 'back' }
   | { type: 'SET_LIVENESS_VIDEO'; payload: Blob }
   | { type: 'CLEAR_LIVENESS_VIDEO' }
   // Contact verification (email/phone OTP proof)

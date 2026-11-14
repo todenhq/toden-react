@@ -20,7 +20,7 @@ export interface HostedVerificationProps {
    */
   token: string;
   /**
-   * The API origin to call DIRECTLY, e.g. `https://trust.myaza.app`. Absent
+   * The API origin to call DIRECTLY, e.g. `https://api.toden.co`. Absent
    * (the default, `''`), every request goes same-origin through the hosting
    * page's `/api` proxy — which was how the hosted page always ran, and why
    * the API saw that page's SERVER as the applicant: Device Intelligence

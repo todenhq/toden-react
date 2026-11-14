@@ -10,7 +10,11 @@ import type { OtpInputStyle } from '../types/config';
 
 /**
  * The code-entry half of the contact step: the digits, the countdown, and the
- * two ways out of a code that never arrived — resend, or try the other channel.
+ * two ways out of a code that never arrived: resend, or try the other channel.
+ *
+ * A used-up code (`usedUp`: its attempts ran out) disables the field, paste
+ * and auto-submit. The step's primary button then sends a new code, so the
+ * Resend link steps aside rather than offer the same action twice.
  */
 export function ContactCodePanel({
   code,
@@ -22,6 +26,8 @@ export function ContactCodePanel({
   onResend,
   otherChannel,
   disabled,
+  alphanumeric,
+  usedUp = false,
 }: {
   code: string;
   onChange: (code: string) => void;
@@ -33,6 +39,10 @@ export function ContactCodePanel({
   /** The channel NOT currently in use, when the workflow offers a second one. */
   otherChannel: PhoneOtpChannel | null;
   disabled?: boolean;
+  /** Letters as well as digits (config `alphanumericCode`). */
+  alphanumeric?: boolean;
+  /** The current code's attempts ran out: no entry until a new code is sent. */
+  usedUp?: boolean;
 }) {
   const t = useText();
   return (
@@ -42,8 +52,9 @@ export function ContactCodePanel({
         onChange={onChange}
         codeLength={codeLength}
         style={style}
-        disabled={disabled}
-        onComplete={onComplete}
+        disabled={disabled || usedUp}
+        onComplete={usedUp ? undefined : onComplete}
+        alphanumeric={alphanumeric}
       />
       <div className="flex items-center justify-between text-xs text-muted-foreground">
         {expiresAt ? (
@@ -51,14 +62,16 @@ export function ContactCodePanel({
         ) : (
           <span>{t('contact.code.expiresSoon')}</span>
         )}
-        <button
-          type="button"
-          className="font-medium text-primary hover:underline disabled:opacity-50"
-          onClick={() => onResend()}
-          disabled={disabled}
-        >
-          {t('contact.code.resend')}
-        </button>
+        {!usedUp && (
+          <button
+            type="button"
+            className="font-medium text-primary hover:underline disabled:opacity-50"
+            onClick={() => onResend()}
+            disabled={disabled}
+          >
+            {t('contact.code.resend')}
+          </button>
+        )}
       </div>
       {/* The single most useful escape hatch on this screen: a code that never
           arrives is usually a channel problem, not a typo. */}

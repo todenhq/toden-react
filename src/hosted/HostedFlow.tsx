@@ -139,6 +139,7 @@ export function HostedFlow({
         enableLiveness={leg.enableLiveness}
         livenessMode={leg.livenessMode as 'gestures' | 'flash' | 'both' | 'passive' | undefined}
         flashSequenceLength={leg.flashSequenceLength as number | undefined}
+        maxLivenessAttempts={leg.maxLivenessAttempts as number | false | undefined}
         livenessBrightScreen={leg.livenessBrightScreen as boolean | undefined}
         selfieReview={leg.selfieReview as boolean | undefined}
         deviceIntelligence={snap.deviceIntelligence}

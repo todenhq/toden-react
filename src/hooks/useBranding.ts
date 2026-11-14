@@ -13,6 +13,15 @@ export interface ResolvedBranding {
   companyName?: string;
 }
 
+/**
+ * The logo to show. Unset is the organisation's logo, as 'default' is
+ * (decision 2026-11-13); an empty string is a workflow's "None" and shows
+ * nothing; anything else is an image URL.
+ */
+export function resolveLogo(configured: string | undefined, orgLogo: string | undefined): string | undefined {
+  return configured === undefined || configured === 'default' ? orgLogo : configured || undefined;
+}
+
 /** Resolves the effective branding (logo + company name) for the current org. */
 export function useBranding(): ResolvedBranding {
   const config = useVerificationConfig();
@@ -20,7 +29,7 @@ export function useBranding(): ResolvedBranding {
   const configuredLogo = config.appearance?.logo;
 
   return {
-    logo: configuredLogo === 'default' ? serverBranding?.logo : configuredLogo,
+    logo: resolveLogo(configuredLogo, serverBranding?.logo),
     companyName: config.appearance?.companyName ?? serverBranding?.companyName,
   };
 }

@@ -22,9 +22,9 @@ describe('userData survives a workflow mount', () => {
     // workflow mount silently stops comparing names.
     const merged = mergeWorkflowConfig(
       { country: 'NG', idTypes: ['pvc'], enableSelfie: true } as never,
-      { country: 'GH', userData: { firstName: 'Emmanuel', lastName: 'Ingwe' } },
+      { country: 'GH', userData: { firstName: 'Benedict', lastName: 'Okeke' } },
     );
-    expect(merged.userData).toEqual({ firstName: 'Emmanuel', lastName: 'Ingwe' });
+    expect(merged.userData).toEqual({ firstName: 'Benedict', lastName: 'Okeke' });
     expect(merged.country).toBe('NG'); // the flow still wins on keys it owns
   });
 });
@@ -45,8 +45,8 @@ describe('empty names are absent, not submitted', () => {
   });
 
   it('sends what it has when only one field is filled', () => {
-    expect(derive({ firstName: 'Emmanuel', lastName: '' })).toEqual({
-      firstName: 'Emmanuel',
+    expect(derive({ firstName: 'Benedict', lastName: '' })).toEqual({
+      firstName: 'Benedict',
       lastName: undefined,
     });
   });

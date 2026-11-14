@@ -2,7 +2,7 @@ import { useEffect, useRef } from 'react';
 import type { VerificationApi } from '../services/api';
 import type { VerificationState } from '../context/types';
 import { progressFromState, progressFingerprint, isUntouchedProgress } from '../lib/session-progress';
-import { progressSaveStopsFlow, sessionCancelledMessage } from '../lib/session-cancelled';
+import { progressSaveStopsFlow, sessionEndAction, type SessionEndAction } from '../lib/session-cancelled';
 
 /** Typing shouldn't put a request on the wire per keystroke. */
 const SAVE_DEBOUNCE_MS = 800;
@@ -17,20 +17,21 @@ const SAVE_DEBOUNCE_MS = 800;
  * skips writes when nothing worth saving has actually changed — otherwise idle
  * re-renders would put the same payload back repeatedly.
  *
- * The one failure that is NOT swallowed is a cancelled session: every later
- * save and the submission would be refused too, so `onCancelled` stops the flow.
+ * The one failure that is NOT swallowed is a cancelled or declined session:
+ * every later save and the submission would be refused too, so `onEnded`
+ * receives the action that stops the flow (dispatch it).
  */
 export function useSessionProgress(
   api: VerificationApi,
   state: VerificationState,
-  onCancelled?: (message: string | null) => void,
+  onEnded?: (action: SessionEndAction) => void,
 ): void {
   const lastSaved = useRef<string | null>(null);
   const sessionId = state.sessionId;
 
   // Derived here rather than in the effect body so the fingerprint is the effect's
   // actual dependency — the state object identity changes on every render.
-  const payload = sessionId && !state.sessionCancelled ? progressFromState(state) : null;
+  const payload = sessionId && !state.sessionCancelled && !state.sessionDeclined ? progressFromState(state) : null;
   const fingerprint = payload ? progressFingerprint(payload) : null;
 
   useEffect(() => {
@@ -52,7 +53,8 @@ export function useSessionProgress(
       lastSaved.current = fingerprint;
       void api.saveProgress(sessionId, payload).catch((err: unknown) => {
         if (progressSaveStopsFlow(err)) {
-          onCancelled?.(sessionCancelledMessage(err));
+          const ended = sessionEndAction(err);
+          if (ended) onEnded?.(ended);
           return;
         }
         // Allow a later change to retry: a save that failed must not be

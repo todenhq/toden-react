@@ -9,6 +9,7 @@
 import { VerificationApiError } from '../services/api';
 import { VerificationError, type VerificationErrorCode } from '../types/verification';
 import { isSessionCancelledError, sessionCancelledMessage } from './session-cancelled';
+import { sessionDeclinedFrom, sessionDeclinedKeys } from './session-declined';
 import { BUSINESS_DOCUMENT_LABELS } from './business-application';
 import type { BusinessDocumentKey } from '../types/business';
 import { defaultText } from '../i18n/translate';
@@ -80,6 +81,11 @@ export function mapToVerificationError(err: unknown, context: ErrorContext, t: T
     // never a generic "try again" (lib/session-cancelled.ts).
     if (isSessionCancelledError(err)) {
       return new VerificationError('session_cancelled', sessionCancelledMessage(err) ?? t('general.sessionCancelled.description'));
+    }
+    // A declined session is final: its own code, never a retry (lib/session-declined.ts).
+    const declined = sessionDeclinedFrom(err);
+    if (declined) {
+      return new VerificationError('session_declined', declined.message ?? t(sessionDeclinedKeys(declined).description));
     }
     // 422 missing_documents carries the missing doc keys — name them so the
     // user knows exactly which required business documents to go back for.

@@ -181,6 +181,7 @@ function VerificationInner({
   enableLiveness,
   livenessMode,
   flashSequenceLength,
+  maxLivenessAttempts,
   livenessBrightScreen,
   selfieReview,
   deviceIntelligence,
@@ -249,6 +250,7 @@ function VerificationInner({
     ...(enableLiveness !== undefined ? { enableLiveness } : {}),
     ...(livenessMode !== undefined ? { livenessMode } : {}),
     ...(flashSequenceLength !== undefined ? { flashSequenceLength } : {}),
+    ...(maxLivenessAttempts !== undefined ? { maxLivenessAttempts } : {}),
     ...(livenessBrightScreen !== undefined ? { livenessBrightScreen } : {}),
     ...(selfieReview !== undefined ? { selfieReview } : {}),
     ...(deviceIntelligence !== undefined ? { deviceIntelligence } : {}),
@@ -278,7 +280,7 @@ function VerificationInner({
     ...(userData ? { userData } : {}),
     ...(businessPrefill ? { businessPrefill } : {}),
     ...(assetsBasePath ? { assetsBasePath } : {}),
-  }), [country, workflowId, idTypes, countries, idSelectionLayout, multiId, enableSelfie, enableDocumentCapture, allowDocumentUpload, allowDocumentScan, documentReview, documentAudio, livenessAudio, enableLiveness, livenessMode, flashSequenceLength, livenessBrightScreen, selfieReview, deviceIntelligence, deviceHandoff, consentStep, silentCapture, biometric, requireMobileDevice, voiceGuidance, showThemeToggle, progressStyle, fullScreen, disableClose, appearance, consent, success, texts, emailVerification, phoneVerification, questionnaire, proofOfAddress, supportingDocuments, addressCollection, nfc, metadata, userId, userData, businessPrefill, assetsBasePath]);
+  }), [country, workflowId, idTypes, countries, idSelectionLayout, multiId, enableSelfie, enableDocumentCapture, allowDocumentUpload, allowDocumentScan, documentReview, documentAudio, livenessAudio, enableLiveness, livenessMode, flashSequenceLength, maxLivenessAttempts, livenessBrightScreen, selfieReview, deviceIntelligence, deviceHandoff, consentStep, silentCapture, biometric, requireMobileDevice, voiceGuidance, showThemeToggle, progressStyle, fullScreen, disableClose, appearance, consent, success, texts, emailVerification, phoneVerification, questionnaire, proofOfAddress, supportingDocuments, addressCollection, nfc, metadata, userId, userData, businessPrefill, assetsBasePath]);
 
   // Pre-load MediaPipe Face Mesh model as soon as the SDK mounts and apply the
   // voice-guidance config (enabled + language) for the spoken liveness prompts.
@@ -377,9 +379,7 @@ function VerificationInner({
   // Best-effort by contract: sessions are for resuming and visibility, and a
   // failure here must never stop someone verifying.
   // Persist progress as the user advances (no-ops without a session).
-  useSessionProgress(sessionApiRef.current, state, (message) =>
-    dispatch({ type: 'SET_SESSION_CANCELLED', payload: { message } }),
-  );
+  useSessionProgress(sessionApiRef.current, state, dispatch);
 
   // One attempt per scope (key, server, workflow, user). The flow and the
   // phone handoff both wait on the SAME promise, so "continue on your phone"
@@ -456,11 +456,13 @@ function VerificationInner({
       } catch (err) {
         entry.failed = true;
         // Resuming is a convenience; verifying is not conditional on it. The one
-        // refusal that DOES stop the flow is a cancelled session: the applicant
-        // must not be walked into captures the server will refuse.
+        // refusal that DOES stop the flow is a cancelled or declined session:
+        // the applicant must not be walked into captures the server will refuse.
         const failure = classifySessionStartFailure(err);
         if (failure.kind === 'cancelled') {
           dispatch({ type: 'SET_SESSION_CANCELLED', payload: { message: failure.message } });
+        } else if (failure.kind === 'declined') {
+          dispatch({ type: 'SET_SESSION_DECLINED', payload: failure.declined });
         }
         return null;
       }
@@ -581,6 +583,7 @@ function VerificationInner({
       enableLiveness={enableLiveness}
       livenessMode={livenessMode}
       flashSequenceLength={flashSequenceLength}
+      maxLivenessAttempts={maxLivenessAttempts}
       livenessBrightScreen={livenessBrightScreen}
       selfieReview={selfieReview}
       deviceIntelligence={deviceIntelligence}
