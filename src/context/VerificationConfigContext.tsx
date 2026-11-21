@@ -128,6 +128,8 @@ export interface VerificationConfigValue {
   idTypes?: AnyIdType[];
   /** Where a multi-country flow picks the country (lib/id-selection-layout.ts). */
   idSelectionLayout?: import('../lib/id-selection-layout').IdSelectionLayout;
+  /** The offered country the app's own `country` prop named on a multi-country flow (lib/app-country.ts). */
+  appCountry?: AnyCountry;
   metadata?: Record<string, string>;
   /** The org's user reference → Entity.externalUserId at the seam (not matched). */
   userId?: string;

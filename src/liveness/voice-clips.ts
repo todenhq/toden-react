@@ -17,17 +17,48 @@
 export interface VoiceManifest {
   /** Changes whenever any clip changes; part of every clip URL. */
   version: string;
-  voices: Record<string, { languages: string[] }>;
+  voices: Record<string, ManifestVoice>;
+  /**
+   * Whose voices may speak to a country Toden has no voice from, best first
+   * (Toden's own list; absent from a server older than it).
+   */
+  neighbours?: Record<string, string[]>;
+  /** The country whose voices speak when nothing nearer does (US); absent from an older server. */
+  fallbackCountry?: string;
   /** Language, then phrase key, then the exact text of that clip. */
   phrases: Record<string, Record<string, string>>;
 }
 
-/** Which clips to load: the server's voice assets, a voice id and a BCP-47 language. */
+/** One voice in the manifest. A server older than local voices sends `languages` alone. */
+export interface ManifestVoice {
+  languages: string[];
+  gender?: 'female' | 'male';
+  /** ISO 3166-1 alpha-2; absent where the accent is not one country's. */
+  country?: string;
+  /** False for a voice Toden no longer offers: playable where named, never chosen for anyone. */
+  offered?: boolean;
+}
+
+/** Who the prompts are for, and how a voice is matched to them (the workflow's `localVoice`). */
+export interface LocalVoiceRequest {
+  /** A gender, either, or `off`: their own country and its neighbours are skipped. */
+  choice: 'female' | 'male' | 'any' | 'off';
+  /** The country of the document being verified, ISO-2; unknown until one is picked. */
+  country?: string | null;
+  /** The same for one person all session, so their voice does not change part way. */
+  seed: string;
+  /** A neighbouring country's voice where the applicant's own has none. Default true. */
+  neighbours?: boolean;
+}
+
+/** Which clips to load: the server's voice assets, a BCP-47 language, and the voice. */
 export interface VoiceClipSource {
   /** e.g. `https://api.toden.co/api/v1/assets/voices`. */
   assetsUrl: string;
-  voice: string;
+  /** The workflow's own Toden voice; with `local`, the voice for everyone it has no local voice for. */
+  voice?: string;
   language: string;
+  local?: LocalVoiceRequest;
 }
 
 /** The manifest gets this long before the device voice is kept for the session. */
@@ -53,6 +84,65 @@ export function normalisePhrase(text: string): string {
 /** The primary subtag of a BCP-47 tag, lower case: `en-US` is `en`. */
 export function primaryLanguage(tag: string): string {
   return tag.split(/[-_]/)[0].toLowerCase();
+}
+
+/** FNV-1a, 32 bit: one person's seed to a number that is the same on every run and every Toden SDK. */
+export function voiceSeedNumber(seed: string): number {
+  let hash = 0x811c9dc5;
+  for (let i = 0; i < seed.length; i += 1) {
+    hash ^= seed.charCodeAt(i);
+    hash = Math.imul(hash, 0x01000193);
+  }
+  return hash >>> 0;
+}
+
+/**
+ * The voice that speaks for this person (kyc-core docs/VOICE_GUIDANCE.md, "Who
+ * speaks, from SDK 4.4.0"), or null for the device's voice. In order:
+ *
+ *  1. their own country's offered voices with clips in the language, of the
+ *     gender asked for, or, when it has none of that gender, any of them (the
+ *     accent comes first);
+ *  2. a neighbouring country's, from Toden's own list in the manifest: the
+ *     first neighbour with a voice of the gender asked for, else the first
+ *     with any (the accent is borrowed either way, so the gender decides);
+ *  3. the workflow's own `voice`;
+ *  4. an American voice (the manifest's `fallbackCountry`), of the gender asked for.
+ *
+ * `off` skips 1 and 2. Several voices are told apart by the person's seed, so
+ * they keep one voice all session. Without `local` only 3 applies (the device
+ * voice, never chosen here, is decided by the caller).
+ */
+export function pickVoice(manifest: VoiceManifest, source: Pick<VoiceClipSource, 'voice' | 'language' | 'local'>): string | null {
+  const lang = primaryLanguage(source.language);
+  const voices = manifest.voices ?? {};
+  const speaks = (id: string) => voices[id]?.languages?.includes(lang) === true;
+  const workflowVoice = source.voice && speaks(source.voice) ? source.voice : null;
+  const local = source.local;
+  if (!local) return workflowVoice;
+
+  const from = (code: string) =>
+    Object.keys(voices)
+      .filter((id) => voices[id]!.country === code.toUpperCase() && voices[id]!.offered !== false && speaks(id))
+      .sort();
+  const gender = local.choice === 'off' ? 'any' : local.choice;
+  const ofGender = (ids: string[]) => (gender === 'any' ? ids : ids.filter((id) => voices[id]!.gender === gender));
+  const preferred = (ids: string[]) => (ofGender(ids).length > 0 ? ofGender(ids) : ids);
+  const one = (ids: string[]) => ids[voiceSeedNumber(local.seed) % ids.length]!;
+
+  const country = local.country?.trim().toUpperCase();
+  if (local.choice !== 'off' && country) {
+    const own = from(country);
+    if (own.length > 0) return one(preferred(own));
+    if (local.neighbours !== false) {
+      const nearby = (manifest.neighbours?.[country] ?? []).map(from);
+      const matching = nearby.map(ofGender).find((ids) => ids.length > 0) ?? nearby.find((ids) => ids.length > 0);
+      if (matching) return one(matching);
+    }
+  }
+  if (workflowVoice) return workflowVoice;
+  const fallback = manifest.fallbackCountry ? from(manifest.fallbackCountry) : [];
+  return fallback.length > 0 ? one(preferred(fallback)) : null;
 }
 
 /**
@@ -170,8 +260,8 @@ async function fetchClip(url: string, ctx: AudioContext): Promise<AudioBuffer | 
   }
 }
 
-function clipUrl(source: VoiceClipSource, version: string, key: string): string {
-  const segments = [version, source.voice, primaryLanguage(source.language), `${key}.mp3`];
+function clipUrl(source: VoiceClipSource, voice: string, version: string, key: string): string {
+  const segments = [version, voice, primaryLanguage(source.language), `${key}.mp3`];
   return `${source.assetsUrl}/${segments.map(encodeURIComponent).join('/')}`;
 }
 
@@ -183,7 +273,10 @@ function clipUrl(source: VoiceClipSource, version: string, key: string): string 
  * for it (waitForClip); past that, the device voice speaks it.
  */
 export async function loadVoiceClips(source: VoiceClipSource): Promise<void> {
-  const sourceId = `${source.assetsUrl}|${source.voice}|${primaryLanguage(source.language)}`;
+  const local = source.local
+    ? `${source.local.choice}:${source.local.country?.toUpperCase() ?? ''}:${source.local.seed}:${source.local.neighbours !== false}`
+    : '';
+  const sourceId = `${source.assetsUrl}|${source.voice ?? ''}|${primaryLanguage(source.language)}|${local}`;
   if (sourceId === loadedSource) return;
   resetVoiceClips();
   loadedSource = sourceId;
@@ -198,9 +291,11 @@ export async function loadVoiceClips(source: VoiceClipSource): Promise<void> {
 
   const manifest = await fetchManifest(source.assetsUrl);
   if (generation !== loadGeneration) return;
-  const keys = manifest ? phraseKeysByText(manifest, source.voice, source.language) : null;
+  // Only now is it known who speaks: the manifest says which voices are whose.
+  const voice = manifest ? pickVoice(manifest, source) : null;
+  const keys = manifest && voice ? phraseKeysByText(manifest, voice, source.language) : null;
   const ctx = keys ? ensureContext() : null;
-  if (!manifest || !keys || !ctx) {
+  if (!manifest || !voice || !keys || !ctx) {
     settle();
     return;
   }
@@ -210,7 +305,7 @@ export async function loadVoiceClips(source: VoiceClipSource): Promise<void> {
 
   await Promise.all(
     [...new Set(keys.values())].map(async (key) => {
-      const buffer = await fetchClip(clipUrl(source, manifest.version, key), ctx);
+      const buffer = await fetchClip(clipUrl(source, voice, manifest.version, key), ctx);
       if (buffer && generation === loadGeneration) {
         buffers.set(key, buffer);
         notify();

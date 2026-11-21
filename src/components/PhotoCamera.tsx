@@ -14,7 +14,7 @@ import { useCamera } from '../hooks/useCamera';
 import { useCameraPrimer } from '../hooks/useCameraPrimer';
 import { useTorch } from '../hooks/useTorch';
 import { useText } from '../i18n';
-import { DOCUMENT_CAPTURE_HEIGHT, DOCUMENT_CAPTURE_WIDTH, isFrontFacingStream } from '../lib/capture-settings';
+import { documentCaptureSize, isFrontFacingStream } from '../lib/capture-settings';
 import { hasNoWebcam, isDesktopDevice } from '../lib/device';
 import { safeReportError } from '../lib/errors';
 import { useModalSurface } from '../lib/modal-surface';
@@ -190,7 +190,7 @@ function PhotoCameraBody(p: BodyProps) {
   const camera = useCamera({
     facingMode: 'environment',
     enabled: allowed,
-    resolution: { width: DOCUMENT_CAPTURE_WIDTH, height: DOCUMENT_CAPTURE_HEIGHT },
+    resolution: documentCaptureSize(),
   });
   const torch = useTorch(camera.stream);
   // A webcam's preview is mirrored, as the scan's is; the photo is not.

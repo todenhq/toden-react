@@ -110,10 +110,11 @@ export default function VerifyButton() {
 | `apiKey`                | `string`                                  | —                   | **Required.** Sent as `Authorization: Bearer`. The **environment is derived from the key prefix** (`pk_test_…` → sandbox, `pk_live_…` → production); an unrecognized prefix throws. |
 | `country`               | `string` (ISO-2)                          | —                   | Country whose ID types are offered. **Required unless `workflowId` is set** (the workflow carries its own country). Any ISO-2 code works — `'NG' \| 'GH' \| 'KE' \| 'ZA' \| 'CI'` keep autocomplete and client-side format validation; every other country renders its ID types from the server. See [Country coverage](#country-coverage). |
 | `workflowId`            | `string` (`wf_…`)                         | —                   | Run a **published Workflow** built in the dashboard. Workflow config wins over overlapping props. See [Workflows](#workflows). |
+| `lockCountry`           | `boolean`                                 | `false`             | With `country`, on a workflow that offers several countries: fix the flow to that country, with no country picker. Ignored when no `country` is passed or the workflow does not offer it (4.4.0 and later). |
 | `countries`             | `Array<{ country, idTypes? }>`            | —                   | Multi-region flows — more than one entry opens with a country-select step. Usually supplied by a workflow.            |
 | `idTypes`               | `IdType[]`                                | all allowed for org | Subset of ID types to offer; must be valid for `country`.                                                            |
 | `userId`                | `string`                                  | —                   | **Your** reference for the person being verified. Not matched during verification — it correlates repeat checks of the same user onto one identity so results map back to your record. Prefer this over putting a user id in `metadata`. |
-| `userData`              | `{ firstName?, lastName?, dateOfBirth? }` | —                   | Pre-fills the user's details.                                                                                        |
+| `userData`              | `{ firstName?, lastName?, dateOfBirth?, email? }` | —            | Pre-fills the user's details. `email` is never asked for in the flow: pass it when you hold it, so your organisation can have the applicant emailed about a decision. |
 | `enableSelfie`          | `boolean`                                 | `true`              | Capture a selfie during liveness.                                                                                    |
 | `enableDocumentCapture` | `boolean`                                 | `true`              | Enable the document-scan step for document IDs.                                                                      |
 | `allowDocumentUpload`   | `boolean`                                 | `true`              | Allow picking a document photo from the device (gallery / drag-and-drop) as an alternative to the camera. `false` hides every "upload instead" affordance (it's still offered on the camera-permission-denied screen as an escape hatch). |
@@ -124,7 +125,7 @@ export default function VerifyButton() {
 | `livenessBrightScreen`  | `boolean`                                 | `true`              | While the selfie camera is on, show the flow in its light theme so the screen lights the face. See [Liveness modes](#liveness-modes). |
 | `livenessGestureGuide`  | `boolean`                                 | `true`              | On the liveness camera, a face icon pops up in the window, acts out the gesture being asked for once, then goes, coming back only if the person stops responding. The instruction is shown in words either way. Usually set with the workflow builder's "Show each gesture" switch. |
 | `selfieReview`         | `boolean`                                 | `false`             | Show the selfie with Retake and Continue after the liveness capture. Off by default: the capture hands straight on to the next step. A failed upload still shows it. |
-| `voiceGuidance`         | `boolean \| { enabled?, language?, voice? }` | `true`           | Spoken liveness instructions (accessibility, TTS **output** — no microphone). `false` mutes it; pass `{ language: 'fr-FR' }` to set the language, or `{ voice: 'lyra' }` for a Toden voice. Overrides the workflow's setting key by key. See [Voice guidance](#voice-guidance). |
+| `voiceGuidance`         | `boolean \| { enabled?, language?, voice?, localVoice?, localVoiceNeighbours? }` | `true`           | Spoken liveness instructions (accessibility, TTS **output** — no microphone). `false` mutes it; pass `{ language: 'fr-FR' }` to set the language, or `{ voice: 'lyra' }` for a Toden voice. Overrides the workflow's setting key by key. See [Voice guidance](#voice-guidance). |
 | `emailVerification`     | `EmailVerificationConfig`                 | off                 | Email OTP step after consent. See [Optional steps](#optional-steps).                                                 |
 | `phoneVerification`     | `PhoneVerificationConfig`                 | off                 | Phone OTP step (SMS or WhatsApp). See [Optional steps](#optional-steps).                                             |
 | `proofOfAddress`        | `ProofOfAddressConfig`                    | off                 | Proof-of-address upload after capture. See [Optional steps](#optional-steps).                                        |
@@ -178,6 +179,8 @@ The SDK fetches the published workflow and uses it as the source of truth:
 - **Runtime data always comes from your code**: `userId`, `userData`,
   `metadata`, and every callback.
 - `country` becomes optional, because the workflow carries it.
+- On a workflow that offers several countries, `country` sets the country for this person: when the workflow offers it, the country picker opens on it, ahead of the workflow's own country and the visitor's location. Add `lockCountry` to remove the picker. A country the workflow does not offer is ignored, and on a single-country workflow `country` changes nothing.
+- The same choice follows the person: a phone that continues the session from the QR code opens on the same country, and a hosted link names one with `?country=GH` (add `&lockCountry=1` to remove the picker).
 - An unknown or unpublished id surfaces as a blocking `invalid_workflow` error
   through `onError` and in the modal — never a silently different flow.
 
@@ -448,23 +451,34 @@ import { Verification, VerificationError } from "@toden/react";
 ### Voice guidance
 
 The liveness instructions are spoken as well as shown. `voiceGuidance` is a
-boolean or `{ enabled?, language?, voice? }`:
+boolean or `{ enabled?, language?, voice?, localVoice?, localVoiceNeighbours? }`:
 
 - `enabled` (default `true`) turns the spoken prompts on or off.
 - `language` (BCP-47, default `'en-US'`) picks the device voice's language and the
   language of Toden's clips (`'en-US'` plays the `en` clips).
-- `voice` is a Toden voice id, usually chosen per workflow in the builder (for
-  example `'lyra'` or `'rory'`). The SDK then plays Toden's recorded clips of that
-  voice, fetched from the Toden server when the liveness step opens. A prompt with
-  no clip (a workflow's own wording, a language without clips) or a clip that has
-  not loaded is spoken by the device voice, and nothing ever waits on the clips.
-  They are fetched with `fetch` and played through Web Audio, so a Content Security
-  Policy needs only the Toden server in `connect-src`, as it already does.
+- From 4.4.0 a Toden voice speaks by default, chosen for each person: a voice from
+  the country of the document being verified (a Nigerian hears a Nigerian voice),
+  else a neighbouring country's (Toden's own short list), else `voice`, else an
+  American voice. The clips are fetched from the Toden server and played through
+  Web Audio, so a Content Security Policy needs only the Toden server in
+  `connect-src`, as it already does. A prompt with no clip (a workflow's own
+  wording, a language without clips) or a clip that has not loaded is spoken by
+  the device's voice, and nothing ever waits on the clips.
+- `voice` is a Toden voice id (for example `'lyra'`), usually chosen per workflow
+  in the builder: who speaks to anyone the person's country and its neighbours
+  have no voice for. `'device'` uses the device's own voice for everyone.
+- `localVoice` (`'any'`, the default, `'female'`, `'male'` or `'off'`) is how the
+  voice is matched to the person's country. Where the country has no voice of the
+  gender asked for, one of its other voices speaks. `'off'` skips the country and
+  its neighbours. One voice is chosen per person and kept for the session (the
+  same one for the same `userId`).
+- `localVoiceNeighbours` (default `true`): `false` skips the neighbouring
+  country's voice.
 
 The prop overrides the workflow's setting key by key: `{ voice: 'rory' }` keeps the
 workflow's `enabled` and `language`, and a bare `false` turns guidance off whatever
-the workflow says. Toden voices need `@toden/react` 4.3.0 or later; earlier versions
-use the device voice.
+the workflow says. A named Toden voice needs `@toden/react` 4.3.0 or later, and the
+automatic choice 4.4.0 or later; earlier versions use the device voice.
 
 ```tsx
 <Verification apiKey="pk_live_xxx" workflowId="wf_abc123" voiceGuidance={{ voice: 'lyra' }} />

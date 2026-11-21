@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { isFrontFacingStream } from './capture-settings';
+import { documentCaptureSize, isFrontFacingStream } from './capture-settings';
 
 /** Minimal stand-in for a MediaStream carrying one video track. */
 function streamWith(track: {
@@ -58,5 +58,29 @@ describe('isFrontFacingStream', () => {
 
   it('survives a track with no label', () => {
     expect(isFrontFacingStream(streamWith({}))).toBe(true);
+  });
+});
+
+describe('documentCaptureSize', () => {
+  const HIGH = { width: 2560, height: 1440 };
+  const STANDARD = { width: 1920, height: 1080 };
+
+  it('asks a capable phone for the larger frame, so the card and its barcode have more pixels', () => {
+    expect(documentCaptureSize({ hardwareConcurrency: 8, deviceMemory: 8 })).toEqual(HIGH);
+    expect(documentCaptureSize({ hardwareConcurrency: 6, deviceMemory: 4 })).toEqual(HIGH);
+  });
+
+  it('keeps a small phone at 1080p: it also records the stream, and a larger frame would stutter', () => {
+    expect(documentCaptureSize({ hardwareConcurrency: 4, deviceMemory: 8 })).toEqual(STANDARD);
+    expect(documentCaptureSize({ hardwareConcurrency: 8, deviceMemory: 2 })).toEqual(STANDARD);
+  });
+
+  it('judges a browser that does not report its memory (Safari) on its cores alone', () => {
+    expect(documentCaptureSize({ hardwareConcurrency: 6 })).toEqual(HIGH);
+    expect(documentCaptureSize({ hardwareConcurrency: 4 })).toEqual(STANDARD);
+  });
+
+  it('stays at 1080p when the browser says nothing about the device', () => {
+    expect(documentCaptureSize({})).toEqual(STANDARD);
   });
 });

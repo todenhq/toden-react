@@ -643,6 +643,14 @@ export interface HandoffSessionSnapshot {
   idTypes?: string[];
   /** Where a multi-country flow picks the country (lib/id-selection-layout.ts). */
   idSelectionLayout?: 'combined' | 'separate';
+  /**
+   * The country the app (or the link) named for this person, and whether the
+   * flow is fixed to it (lib/app-country.ts). Carried on the session so a
+   * phone that continues it gets the same country: the server keeps a
+   * workflow's own config and would otherwise drop what the app said.
+   */
+  appCountry?: string;
+  lockCountry?: boolean;
   /** Multi-ID POLICY (per-country ID offerings live on `countries[]`). */
   multiId?: { count: number; minPassed: number };
   /** Reviewer sent this session back — walk only these steps. */

@@ -108,6 +108,7 @@ export function PreviewCapturePlaceholder({ kind }: { kind: 'document' | 'livene
                   idType: state.selectedIdType,
                   title: specimenTitle(state.selectedIdType, fullName),
                   country: country ? regionCountryName(country) : null,
+                  countryCode: country,
                 },
                 twoSided,
                 accent: config.appearance?.primaryColor ?? '#5645F5',

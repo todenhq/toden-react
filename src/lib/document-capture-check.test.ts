@@ -6,8 +6,7 @@ import {
   captureProblemMessage,
   captureProblemMessages,
   captureProblemSides,
-  captureRetakeLabel,
-} from './document-capture-check';
+  captureRetakeLabel, canContinueAnyway } from './document-capture-check';
 
 describe('captureCheckProblems', () => {
   it('asks only about what a detector looked for and did not find', () => {
@@ -93,5 +92,18 @@ describe('copy', () => {
       CAPTURE_CHECK_CONTINUE_ANYWAY,
     ];
     for (const text of copy) expect(text).not.toContain('—');
+  });
+});
+
+describe('canContinueAnyway', () => {
+  it('never lets a cut-off document through: the verification would fail it', () => {
+    expect(canContinueAnyway([{ side: 'front', kind: 'not_complete' }])).toBe(false);
+    expect(canContinueAnyway([{ side: 'front', kind: 'no_face' }, { side: 'back', kind: 'not_complete' }])).toBe(false);
+  });
+
+  it('still lets a missed face or barcode through, since a detector can miss', () => {
+    expect(canContinueAnyway([{ side: 'front', kind: 'no_face' }])).toBe(true);
+    expect(canContinueAnyway([{ side: 'back', kind: 'no_barcode' }])).toBe(true);
+    expect(canContinueAnyway([])).toBe(true);
   });
 });

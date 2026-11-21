@@ -45,6 +45,7 @@ import type { VerificationConfig, VerificationProps, UseVerificationReturn, Veri
 import type { SubjectType, WorkflowBusinessConfig } from './types/business';
 import { handoffCaptureNeeded } from './lib/handoff-capture';
 import { resumedApplicationFrom } from './lib/resumed-application';
+import { applyAppCountry, resumableProgress } from './lib/app-country';
 
 // Lazy-loaded so the QR/handoff code (and qrcode.react) is code-split out of the
 // initial bundle — it only loads when a desktop user actually reaches the gate.
@@ -162,6 +163,8 @@ function VerificationInner({
   business,
   country,
   countries,
+  appCountry,
+  lockCountry,
   idTypes,
   idSelectionLayout,
   multiId,
@@ -242,6 +245,9 @@ function VerificationInner({
     ...(idTypes ? { idTypes } : {}),
     ...(countries ? { countries } : {}),
     ...(idSelectionLayout ? { idSelectionLayout } : {}),
+    // What the app said about this person's country rides the session, so the
+    // phone opens on it (or is fixed to it) as this device was.
+    ...(appCountry ? { appCountry, lockCountry: lockCountry === true } : {}),
     ...(multiId ? { multiId } : {}),
     ...(enableSelfie !== undefined ? { enableSelfie } : {}),
     ...(enableDocumentCapture !== undefined ? { enableDocumentCapture } : {}),
@@ -395,6 +401,9 @@ function VerificationInner({
   });
   const sessionScopeRef = useRef(sessionScope);
   sessionScopeRef.current = sessionScope;
+  // Read when a session starts, which may be after the flow's countries changed.
+  const countriesRef = useRef(countries);
+  countriesRef.current = countries;
   const handoffSnapshotRef = useRef(handoffSnapshot);
   handoffSnapshotRef.current = handoffSnapshot;
   const startRef = useRef<{
@@ -453,7 +462,10 @@ function VerificationInner({
         // Resuming: put the user back where they were. Media references have been
         // pruned server-side of anything that expired, so a restored capture slot
         // is one whose bytes genuinely still exist.
-        if (started.progress) dispatch({ type: 'RESTORE_PROGRESS', payload: started.progress });
+        // Not when it was saved in a country this flow no longer offers (lib/app-country.ts).
+        if (started.progress && resumableProgress(started.progress, { countries: countriesRef.current })) {
+          dispatch({ type: 'RESTORE_PROGRESS', payload: started.progress });
+        }
         // A KYB application whose business half already committed: the
         // submitting screen replays it rather than sending a second one the
         // server refuses (lib/resumed-application.ts).
@@ -762,7 +774,7 @@ function WorkflowGate(props: VerificationInnerProps) {
     // before anything country-dependent, so any placeholder is safe.
     return (
       <VerificationInner
-        {...props}
+        {...applyAppCountry(props, props.country)}
         country={props.country ?? 'NG'}
         serverConfigOverride={state.override}
       />
@@ -771,10 +783,13 @@ function WorkflowGate(props: VerificationInnerProps) {
 
   // KYB: overlay the mapped applicant workflow's capture template (and record
   // its id for stamping) over the merged config — see overlayApplicantWorkflow.
-  const merged = overlayApplicantWorkflow(
+  // The merge lets the workflow's country replace the app's, so the app's own
+  // `country` is applied last, onto the countries the workflow offers
+  // (lib/app-country.ts).
+  const merged = applyAppCountry(overlayApplicantWorkflow(
     state.flow.applicantWorkflow,
     mergeWorkflowConfig(state.flow.config, props as unknown as Record<string, unknown>),
-  ) as unknown as VerificationInnerProps;
+  ) as unknown as VerificationInnerProps, props.country);
   return (
     <VerificationInner
       {...merged}

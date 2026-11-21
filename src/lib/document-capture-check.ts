@@ -4,7 +4,10 @@
 // whether the verification can read it: the whole document in the frame, a face
 // on the printed photo, a barcode that decodes. `false` means a detector looked and found nothing, which is worth
 // a retake; `null` means it was not checked or could not look, which is not. A
-// detector can miss, so the applicant can always continue anyway.
+// face or barcode detector can miss, so the applicant can continue past those.
+// Not past a cut-off document (user decision 2026-11-21): the server only says
+// so when the document clearly runs off the photo, and the verification then
+// fails it (`document_cut_off`), so continuing would only spend the attempt.
 //
 // Mirrored word for word by the React Native (`lib/documentCaptureCheck.ts`) and
 // Flutter (`config/document_capture_check.dart`) SDKs. Pure; unit-tested.
@@ -57,6 +60,14 @@ export function captureCheckProblems(results: Array<DocumentCaptureCheckResult |
     }
   }
   return problems;
+}
+
+/**
+ * Whether the applicant may go on with the photos as they are. Never with a
+ * cut-off document: that one must be taken again.
+ */
+export function canContinueAnyway(problems: CaptureProblem[]): boolean {
+  return !problems.some((p) => p.kind === 'not_complete');
 }
 
 export function captureProblemMessage(kind: CaptureProblemKind, t: TextFn = defaultText): string {

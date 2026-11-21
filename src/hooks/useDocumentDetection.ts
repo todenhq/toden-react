@@ -32,6 +32,7 @@ export function useDocumentDetection({
   videoRef,
   canvasRef,
   enabled = true,
+  holdCapture = false,
   getVisibleRegion,
   faceRef,
   uprightDocument = false,
@@ -41,6 +42,9 @@ export function useDocumentDetection({
   visibleRef.current = getVisibleRegion;
   const enabledRef = useRef(enabled);
   enabledRef.current = enabled;
+  // Read per frame: ending the hold must not re-arm the loop or lose the steadiness.
+  const holdRef = useRef(holdCapture);
+  holdRef.current = holdCapture;
   // Read per frame too: turning the frame must not re-arm the loop either.
   const uprightRef = useRef(uprightDocument);
   uprightRef.current = uprightDocument;
@@ -155,9 +159,12 @@ export function useDocumentDetection({
       stableStartRef.current = now;
     } else if (now - stableStartRef.current >= STABILITY_DURATION_MS) {
       setIsStable(true);
-      // The loop ends with the capture, unless the frame could not be read.
-      void capture(quad).then((taken) => taken || next());
-      return;
+      // Held: the card stays steady and watched, and the photo waits.
+      if (!holdRef.current) {
+        // The loop ends with the capture, unless the frame could not be read.
+        void capture(quad).then((taken) => taken || next());
+        return;
+      }
     }
     next();
   }, [videoRef, canvasRef, capture, lose, faceRef]);

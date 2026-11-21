@@ -55,6 +55,9 @@ import { cropVideoFrame } from "../lib/video-crop";
 import {
 	emptyRecordingCaptures,
 	isCurrentCapture,
+	MIN_RECORDED_MS,
+	recordingShortBy,
+	recordingSideOf,
 	renewCapture,
 } from "../lib/document-recordings";
 import { shortDocumentLabel } from "../lib/document-label";
@@ -87,8 +90,7 @@ import { mapToVerificationError, safeReportError } from "../lib/errors";
 import { VerificationError } from "../types/verification";
 import { cn } from "../lib/utils";
 import {
-	DOCUMENT_CAPTURE_WIDTH,
-	DOCUMENT_CAPTURE_HEIGHT,
+	documentCaptureSize,
 	DOCUMENT_IMAGE_QUALITY,
 	DOCUMENT_VIDEO_BITRATE,
 	createVideoRecorder,
@@ -250,6 +252,12 @@ export function DocumentCaptureStep() {
 	// handler dispatches to the correct slot (front vs back).
 	const recorderRef = useRef<MediaRecorder | null>(null);
 	const recordingSideRef = useRef<"front" | "back" | null>(null);
+	// When the side's recording began, and whether it has run long enough for
+	// its photo to be taken (lib/document-recordings.ts). True while nothing is
+	// recording, so a browser without a recorder is never kept waiting.
+	const recordingStartedAtRef = useRef<number | null>(null);
+	const [recordedEnough, setRecordedEnough] = useState(true);
+	const [holdingShutter, setHoldingShutter] = useState(false);
 
 	// Every camera surface below (the primers, the stream, detection, the light
 	// meter, immersive mode, recording) gates on this, so upload-only keeps them
@@ -304,10 +312,7 @@ export function DocumentCaptureStep() {
 	const camera = useCamera({
 		facingMode: "environment",
 		enabled: cameraAllowed && (!wantsAudio || microphone.settled),
-		resolution: {
-			width: DOCUMENT_CAPTURE_WIDTH,
-			height: DOCUMENT_CAPTURE_HEIGHT,
-		},
+		resolution: documentCaptureSize(),
 	});
 	// The element the video renders into with `object-fit: cover`. Measured at
 	// capture time so the shutter can crop to the guide the user framed against
@@ -356,6 +361,8 @@ export function DocumentCaptureStep() {
 		// Not while the shutter's zoom plays: the camera keeps running under it
 		// now, and a second photo must not be taken of the side just taken.
 		enabled: cameraActive && camera.isReady && !captureZoom,
+		// The photo waits for its recording; the card stays found and judged.
+		holdCapture: !recordedEnough,
 		faceRef,
 		uprightDocument: turned,
 		getVisibleRegion: (frame) => {
@@ -420,6 +427,7 @@ export function DocumentCaptureStep() {
 		idType: state.selectedIdType,
 		title: specimenTitle(state.selectedIdType, idTypeLabel),
 		country: specimenCountry ? regionCountryName(specimenCountry) : null,
+		countryCode: specimenCountry,
 		// The back from the moment the card is turned over.
 		side: phase === "back" || turningOver ? "back" : "front",
 	};
@@ -548,11 +556,11 @@ export function DocumentCaptureStep() {
 	// so starting the back's recording never drops the front's upload in flight.
 	const recordingTokenRef = useRef(emptyRecordingCaptures());
 
-	// The side being recorded. The stream now runs on from the front to the
-	// back, so a new side, not a new stream, is what starts the next recording;
-	// nothing is recorded during the turn-over between them.
-	const recordingSide: "front" | "back" | null =
-		cameraActive ? (phase === "back" ? "back" : "front") : null;
+	// The side being recorded. The stream runs on from the front to the back,
+	// so a new side, not a new stream, is what starts the next recording, and
+	// the back's starts with the turn-over that leads to it: by the time the
+	// back is photographed its recording is long enough to be checked.
+	const recordingSide = recordingSideOf({ cameraActive, phase, turningOver });
 
 	useEffect(() => {
 		if (!camera.stream || !recordingSide) return;
@@ -612,8 +620,15 @@ export function DocumentCaptureStep() {
 		};
 		recorder.start(200);
 		recorderRef.current = recorder;
+		// No photo of this side until its recording has run long enough.
+		recordingStartedAtRef.current = performance.now();
+		setRecordedEnough(false);
+		const enough = window.setTimeout(() => setRecordedEnough(true), MIN_RECORDED_MS);
 
 		return () => {
+			window.clearTimeout(enough);
+			recordingStartedAtRef.current = null;
+			setRecordedEnough(true);
 			// If the recorder was already stopped manually (e.g. on capture), let
 			// the original onstop dispatch the recorded blob — don't disturb it.
 			if (recorder.state === "inactive") {
@@ -652,6 +667,7 @@ export function DocumentCaptureStep() {
 			}
 		}
 		recorderRef.current = null;
+		recordingStartedAtRef.current = null;
 	}, []);
 
 	// ---------------------------------------------------------------------------
@@ -854,6 +870,18 @@ export function DocumentCaptureStep() {
 	// ---------------------------------------------------------------------------
 
 	const handleManualCapture = useCallback(async () => {
+		// The shutter waits for the recording as the automatic photo does, and
+		// takes the frame at the end of the wait, so the photo is still the
+		// recording's last moment.
+		const startedAt = recordingStartedAtRef.current;
+		const short = recordingShortBy(startedAt, performance.now());
+		if (short > 0) {
+			setHoldingShutter(true);
+			await new Promise((resolve) => window.setTimeout(resolve, short));
+			setHoldingShutter(false);
+			// The side was taken or left while waiting: nothing to photograph.
+			if (recordingStartedAtRef.current !== startedAt) return;
+		}
 		const video = camera.videoRef.current;
 		if (!video || video.readyState < video.HAVE_CURRENT_DATA) return;
 		const frame = { width: video.videoWidth, height: video.videoHeight };
@@ -1389,7 +1417,7 @@ export function DocumentCaptureStep() {
 				<ReadyPrimer
 					{...documentReady({
 						name: documentName,
-						subject: { idType: specimen.idType, title: specimen.title, country: specimen.country },
+						subject: { idType: specimen.idType, title: specimen.title, country: specimen.country, countryCode: specimen.countryCode },
 						twoSided: isTwoSided,
 						accent: config.appearance?.primaryColor ?? "#5645F5",
 					})}
@@ -1472,7 +1500,7 @@ export function DocumentCaptureStep() {
 									hintIsAction: shutterBlocked || documentHintIsAction(guidance.hint),
 									blocked: shutterBlocked,
 								})}
-								busy={isCompressing}
+								busy={isCompressing || holdingShutter}
 								onCapture={handleManualCapture}
 								shutterBlockedReason={turningOver ? t("uploadDocument.flipBanner") : shutterBlockedReason}
 								hasTorch={torch.hasTorch}
@@ -1503,7 +1531,7 @@ export function DocumentCaptureStep() {
 									hintIsAction: shutterBlocked || documentHintIsAction(guidance.hint),
 									blocked: shutterBlocked,
 								})}
-								busy={isCompressing}
+								busy={isCompressing || holdingShutter}
 								torch={torch.torch}
 								hasTorch={torch.hasTorch}
 								onToggleTorch={torch.toggleTorch}

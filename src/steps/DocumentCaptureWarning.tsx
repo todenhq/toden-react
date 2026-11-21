@@ -6,6 +6,7 @@ import { Button } from "../components/ui/button";
 import { cn } from "../lib/utils";
 import { useText } from "../i18n";
 import {
+	canContinueAnyway,
 	captureProblemMessages,
 	captureProblemSides,
 	captureRetakeLabel,
@@ -14,8 +15,9 @@ import {
 } from "../lib/document-capture-check";
 
 // The review footer when the capture check found a photo the verification could
-// not read. Retaking is the primary action; a detector can miss, so continuing
-// with the photos as they are stays one tap away.
+// not read. Retaking is the primary action; a face or barcode detector can
+// miss, so continuing with the photos as they are stays one tap away. A cut-off
+// document offers no way past: the verification would fail it.
 
 export function DocumentCaptureWarning({
 	problems,
@@ -63,13 +65,15 @@ export function DocumentCaptureWarning({
 				))}
 			</div>
 
-			<Button
-				variant='outline'
-				className='w-full'
-				onClick={onContinueAnyway}
-				disabled={isBusy}>
-				{t("common.continueAnyway")}
-			</Button>
+			{canContinueAnyway(problems) && (
+				<Button
+					variant='outline'
+					className='w-full'
+					onClick={onContinueAnyway}
+					disabled={isBusy}>
+					{t("common.continueAnyway")}
+				</Button>
+			)}
 		</div>
 	);
 }

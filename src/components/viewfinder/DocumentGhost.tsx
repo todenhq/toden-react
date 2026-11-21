@@ -51,6 +51,8 @@ export interface DocumentSpecimenSubject {
   idType: string | null | undefined;
   title: string;
   country: string | null;
+  /** The country's ISO-2 code: a few IDs are drawn as that country's own card. */
+  countryCode?: string | null;
   side: 'front' | 'back';
 }
 
@@ -62,7 +64,7 @@ export function specimenSource(
   accent: string,
 ): string {
   return specimenImageSource({
-    kind: specimenKind(subject.idType ?? null),
+    kind: specimenKind(subject.idType ?? null, subject.countryCode),
     title: subject.title,
     country: subject.country,
     side,

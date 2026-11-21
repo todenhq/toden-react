@@ -619,14 +619,34 @@ export interface VoiceGuidanceConfig {
    */
   language?: string;
   /**
-   * A Toden voice id (e.g. `'lyra'`), usually picked per workflow in the
-   * builder. When set, the prompts play Toden's recorded clips of that voice,
-   * fetched from the KYC server when the liveness step opens. The device voice
-   * still speaks a prompt with no clip (a reworded one, a language without
-   * clips, an unknown voice, or a clip that has not loaded). Omitted: the
-   * device voice only, as before.
+   * Who speaks to everyone the applicant's country and its neighbours have no
+   * Toden voice for: a Toden voice id (e.g. `'lyra'`), usually picked per
+   * workflow in the builder, or `'device'` for the device's own voice for
+   * everyone. Omitted: an American Toden voice is the last fallback.
+   *
+   * From 4.4.0 the prompts are spoken, in order, by a Toden voice from the
+   * country of the document being verified, a neighbouring country's, this
+   * voice, then an American one. The device's voice still speaks a prompt with
+   * no clip (a reworded one, a language without clips, a clip that has not
+   * loaded). Before 4.4.0 an omitted voice meant the device's voice.
    */
   voice?: string;
+  /**
+   * How the voice is matched to the applicant's country: `'any'` (the
+   * default), `'female'` or `'male'` of that country's Toden voices, or
+   * `'off'` to skip their country and its neighbours. The country is the one
+   * the document being verified is from (picked in the flow, or the `country`
+   * you passed). Where the country has no voice of the gender asked for, one of
+   * its other voices speaks. One voice is chosen per person and kept for the
+   * session.
+   */
+  localVoice?: 'female' | 'male' | 'any' | 'off';
+  /**
+   * Whether a person whose country Toden has no voice from hears a
+   * neighbouring country's voice (a Tanzanian a Kenyan voice, say). Which
+   * countries stand in for which is Toden's own short list. Default `true`.
+   */
+  localVoiceNeighbours?: boolean;
 }
 
 /**
@@ -671,10 +691,17 @@ export interface VerificationConfig<C extends AnyCountry = AnyCountry> {
   /**
    * Two-letter (ISO-2) country code. Required unless {@link workflowId} is set
    * (the flow carries the country) or {@link subjectType} is `'business'` (the
-   * business block carries its own registry country). When both are present the
-   * flow's country wins. ANY ISO country works — non-curated countries render
-   * their ID types from the server's metadata (Global Documents); the org's
-   * grants are enforced server-side.
+   * business block carries its own registry country). ANY ISO country works —
+   * non-curated countries render their ID types from the server's metadata
+   * (Global Documents); the org's grants are enforced server-side.
+   *
+   * With a workflow, the workflow's countries win. On a workflow that offers
+   * ONE country this prop changes nothing. On a workflow that offers SEVERAL,
+   * pass the country your app already knows this person is from: when the
+   * workflow offers it, the country picker opens on it, ahead of the
+   * workflow's own country and the visitor's location, and
+   * {@link lockCountry} removes the picker altogether. A country the workflow
+   * does not offer is ignored.
    */
   country?: C;
 
@@ -705,6 +732,21 @@ export interface VerificationConfig<C extends AnyCountry = AnyCountry> {
    * {@link subjectType}, this normally rides a resolved workflow config.
    */
   business?: import('./business').WorkflowBusinessConfig;
+
+  /**
+   * With {@link country}, on a flow that offers several countries: fix the
+   * flow to that country, with no country picker at all. Ignored when no
+   * `country` is passed, or when the flow does not offer it (the picker then
+   * shows as usual).
+   */
+  lockCountry?: boolean;
+
+  /**
+   * @internal Set by the SDK, never by your code: the offered country your
+   * `country` prop named on a multi-country flow, so the country step can mark
+   * it and list it first (lib/app-country.ts).
+   */
+  appCountry?: AnyCountry;
 
   /**
    * Multi-region configuration. When more than one country is listed the flow

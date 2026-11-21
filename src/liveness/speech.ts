@@ -40,32 +40,76 @@ let primed = false;
 
 let speechEnabled = true;
 let speechLanguage = 'en-US';
+/** The workflow's own Toden voice: who speaks when the applicant's country and its neighbours have none. */
 let speechVoice: string | undefined;
+/** The admin chose the device's own voice (`voice: 'device'`): no Toden voice speaks. */
+let speechDeviceVoice = false;
+/** How a voice is matched to the applicant's country (the workflow's `localVoice`, default `any`). */
+let speechLocalVoice: 'female' | 'male' | 'any' | 'off' = 'any';
+/** A neighbouring country's voice where the applicant's own has none. */
+let speechLocalNeighbours = true;
+/** The country of the document being verified, once the flow knows it (setSpeechApplicant). */
+let speechCountry: string | undefined;
+/** One per person: the flow's user reference when it has one, else one per page load. */
+let speechSeed = Math.random().toString(36).slice(2);
 /** The server's voice assets URL, known once the flow's API client exists (VerificationConfigContext). */
 let voiceAssetsUrl: string | undefined;
+
+/**
+ * Whether Toden clips are wanted: always, from 4.4.0, unless the admin chose
+ * the device's voice (product owner, 2026-11-21). A server with no clips, or a
+ * phrase without one, still falls back to the device's voice.
+ */
+const wantsClips = (): boolean => !speechDeviceVoice;
+
+/** The `voice` that means the device's own speech, chosen by the admin. */
+export const DEVICE_VOICE_ID = 'device';
 
 export interface ResolvedVoiceGuidance {
   enabled: boolean;
   language: string;
-  /** A Toden voice id, or undefined for the device voice alone. */
+  /** The workflow's own Toden voice, or undefined for none. */
   voice: string | undefined;
+  /** The admin chose the device's own voice: no Toden voice speaks. */
+  deviceVoice: boolean;
+  /** How a voice is matched to the applicant's country; `off` skips their country and its neighbours. */
+  localVoice: 'female' | 'male' | 'any' | 'off';
+  /** A neighbouring country's voice where their own has none. */
+  localVoiceNeighbours: boolean;
 }
 
 /** Normalize the public `voiceGuidance` prop (boolean | object | undefined). */
 export function resolveVoiceGuidance(option?: VoiceGuidanceOption): ResolvedVoiceGuidance {
-  if (option === undefined) return { enabled: true, language: 'en-US', voice: undefined };
-  if (typeof option === 'boolean') return { enabled: option, language: 'en-US', voice: undefined };
-  const voice = typeof option.voice === 'string' && option.voice.trim() ? option.voice.trim() : undefined;
-  return { enabled: option.enabled ?? true, language: option.language ?? 'en-US', voice };
+  const object = option === undefined || typeof option === 'boolean' ? {} : option;
+  const named = typeof object.voice === 'string' && object.voice.trim() ? object.voice.trim() : undefined;
+  const deviceVoice = named === DEVICE_VOICE_ID;
+  const local = object.localVoice;
+  return {
+    enabled: typeof option === 'boolean' ? option : object.enabled ?? true,
+    language: object.language ?? 'en-US',
+    voice: deviceVoice ? undefined : named,
+    deviceVoice,
+    localVoice: local === 'female' || local === 'male' || local === 'off' ? local : 'any',
+    localVoiceNeighbours: object.localVoiceNeighbours !== false,
+  };
 }
 
 /** Apply the resolved voice-guidance config for the rest of the session. */
 export function configureSpeech(option?: VoiceGuidanceOption): void {
-  const { enabled, language, voice } = resolveVoiceGuidance(option);
+  const { enabled, language, voice, deviceVoice, localVoice, localVoiceNeighbours } = resolveVoiceGuidance(option);
   speechEnabled = enabled;
   // A different voice or language drops the clips loaded for the old one.
-  if (voice !== speechVoice || language !== speechLanguage) resetVoiceClips();
+  const sameVoices =
+    voice === speechVoice &&
+    deviceVoice === speechDeviceVoice &&
+    language === speechLanguage &&
+    localVoice === speechLocalVoice &&
+    localVoiceNeighbours === speechLocalNeighbours;
+  if (!sameVoices) resetVoiceClips();
   speechVoice = voice;
+  speechDeviceVoice = deviceVoice;
+  speechLocalVoice = localVoice;
+  speechLocalNeighbours = localVoiceNeighbours;
   // Changing language invalidates the cached voice pick.
   if (language !== speechLanguage) {
     speechLanguage = language;
@@ -73,7 +117,7 @@ export function configureSpeech(option?: VoiceGuidanceOption): void {
     preferredVoice = null;
   }
   if (!enabled) stopSpeaking();
-  if (enabled && voice) armGestureUnlock();
+  if (enabled && wantsClips()) armGestureUnlock();
   // A voice set while the liveness step is already open loads now.
   loadConfiguredClips();
 }
@@ -93,7 +137,7 @@ function armGestureUnlock(): void {
   if (gestureUnlockArmed || typeof document === 'undefined') return;
   gestureUnlockArmed = true;
   const onGesture = () => {
-    if (!speechEnabled || !speechVoice) return;
+    if (!speechEnabled || !wantsClips()) return;
     unlockVoiceAudio();
     if (isVoiceAudioUnlocked()) disarm();
   };
@@ -108,8 +152,9 @@ function armGestureUnlock(): void {
  * Start loading the Toden voice clips, in the background. Called as soon as
  * the flow's API client exists (VerificationConfigContext), so the clips load
  * while the person is still on the earlier steps, and again by the liveness
- * step (harmless: a load for the same voice happens once). Does nothing
- * without a voice, with guidance off, or without the server's voice assets URL.
+ * step (harmless: a load for the same voice happens once). Does nothing with
+ * the device's voice chosen, with guidance off, or without the server's voice
+ * assets URL.
  */
 export function prepareVoiceClips(assetsUrl: string | undefined): void {
   if (assetsUrl !== undefined) voiceAssetsUrl = assetsUrl;
@@ -117,8 +162,35 @@ export function prepareVoiceClips(assetsUrl: string | undefined): void {
 }
 
 function loadConfiguredClips(): void {
-  if (!speechEnabled || !speechVoice || voiceAssetsUrl === undefined) return;
-  void loadVoiceClips({ assetsUrl: voiceAssetsUrl, voice: speechVoice, language: speechLanguage });
+  if (!speechEnabled || !wantsClips() || voiceAssetsUrl === undefined) return;
+  void loadVoiceClips({
+    assetsUrl: voiceAssetsUrl,
+    voice: speechVoice,
+    language: speechLanguage,
+    local: {
+      choice: speechLocalVoice,
+      // With matching off the country changes nothing, so it is left out: a
+      // country picked later then loads nothing again.
+      country: speechLocalVoice === 'off' ? undefined : speechCountry,
+      seed: speechSeed,
+      neighbours: speechLocalNeighbours,
+    },
+  });
+}
+
+/**
+ * Who the prompts are spoken to: the country of the document being verified
+ * (the one picked in the flow, or the one the app passed) and something that
+ * names the person for the whole session. The voice is chosen from these
+ * (pickVoice). Called by the flow as the country becomes known.
+ */
+export function setSpeechApplicant(applicant: { country?: string | null; seed?: string | null }): void {
+  const country = applicant.country?.trim().toUpperCase() || undefined;
+  const seed = applicant.seed?.trim() || speechSeed;
+  if (country === speechCountry && seed === speechSeed) return;
+  speechCountry = country;
+  speechSeed = seed;
+  loadConfiguredClips();
 }
 
 /** Whether spoken guidance is currently enabled. */
@@ -217,7 +289,7 @@ let speakTimer: ReturnType<typeof setTimeout> | null = null;
  */
 export function primeSpeech(): void {
   if (!speechEnabled) return;
-  if (speechVoice) unlockVoiceAudio();
+  if (wantsClips()) unlockVoiceAudio();
   const s = synth();
   if (!s || primed) return;
 
@@ -279,7 +351,7 @@ export function speak(text: string): void {
 function startPhrase(text: string): void {
   speakingText = text;
   const thisTurn = ++turn;
-  if (speechVoice && isVoiceAudioUnlocked() && clipState(text) === 'loading') {
+  if (wantsClips() && isVoiceAudioUnlocked() && clipState(text) === 'loading') {
     // Its clip is on its way: give it a moment rather than say it twice over
     // in two voices. A phrase stopped or replaced meanwhile is dropped.
     void waitForClip(text, clipGraceMs).then(() => {
@@ -296,7 +368,7 @@ function sayPhrase(text: string, thisTurn: number): void {
   // An end event that never comes (a Chrome speech bug, a clip the browser
   // dropped) must not silence every prompt after it.
   setTurnTimer(finished, longestPhraseMs(text));
-  if (speechVoice && playVoiceClip(text, finished)) {
+  if (wantsClips() && playVoiceClip(text, finished)) {
     pendingText = null;
     cancelDeviceSpeech();
     return;

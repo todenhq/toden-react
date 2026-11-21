@@ -29,3 +29,33 @@ export function renewCapture(captures: RecordingCaptures, side: RecordingSide): 
 export function isCurrentCapture(captures: RecordingCaptures, side: RecordingSide, capture: number): boolean {
   return captures[side] === capture;
 }
+
+// How long a side's recording must be, and which side is being recorded.
+//
+// The server reads the recording twice a second and needs three readings to
+// compare the photo with it; a shorter recording is "not checked", which lets
+// an injected back through unexamined. A back whose recording began only when
+// the back's turn came was photographed about a second later, the card already
+// steady in the frame, and 4 of 11 two-sided captures were not checked on the
+// back (measured 2026-11-21). So the back's recording starts with the
+// turn-over, and no photo is taken of either side until its recording has run
+// this long.
+
+/** The least a side's recording runs before its photo is taken. */
+export const MIN_RECORDED_MS = 2200;
+
+/** How much longer the recording must run before the photo: 0 once long enough, or when nothing is recording. */
+export function recordingShortBy(startedAt: number | null, now: number): number {
+  if (startedAt === null) return 0;
+  return Math.max(0, Math.ceil(MIN_RECORDED_MS - (now - startedAt)));
+}
+
+/**
+ * The side being recorded. A side being scanned records itself; the turn-over
+ * records the back it leads to, so the back's recording already holds the card
+ * turning when its photo is taken. Nothing is recorded anywhere else.
+ */
+export function recordingSideOf(input: { cameraActive: boolean; phase: string; turningOver: boolean }): RecordingSide | null {
+  if (input.cameraActive) return input.phase === 'back' ? 'back' : 'front';
+  return input.turningOver ? 'back' : null;
+}

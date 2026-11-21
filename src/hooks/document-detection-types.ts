@@ -12,6 +12,12 @@ export interface UseDocumentDetectionOptions {
   videoRef: React.RefObject<HTMLVideoElement | null>;
   canvasRef: React.RefObject<HTMLCanvasElement | null>;
   enabled?: boolean;
+  /**
+   * Keep finding and judging the card, but take no photo yet (the side's
+   * recording is still too short to be checked). The photo is taken on the
+   * first steady frame after the hold ends.
+   */
+  holdCapture?: boolean;
   /** The part of the frame the preview shows (object-cover hides the rest). */
   getVisibleRegion?: (frame: { width: number; height: number }) => VisibleRegion;
   /** The latest face reading while the camera faces the person (hooks/useFaceWatch.ts). */

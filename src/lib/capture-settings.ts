@@ -17,12 +17,15 @@
 //   • SELFIE still image           — MODERATE.
 //       Captured at 640×480 (plenty for face matching) and JPEG quality 0.8.
 //
-//   • DOCUMENT still image         — CONSERVATIVE (OCR-critical).
+//   • DOCUMENT still image         — CONSERVATIVE (read by machines).
 //       The camera runs at a HIGHER resolution than the liveness camera so the
-//       still stays sharp, JPEG quality 0.9, and it is never downscaled below
-//       1080 px wide — the server OCR has to read small text (ID numbers,
-//       dates). The document VIDEO is still capped aggressively (bitrate +
-//       frame rate), so a higher camera resolution does not blow up its size.
+//       still stays sharp, it is encoded ONCE at JPEG quality 0.95, and it is
+//       never downscaled below 1080 px wide — the server has to read small
+//       text (ID numbers, dates) and decode the barcode on the back of a card,
+//       whose modules are a few pixels wide. A phone that can carry it runs the
+//       camera at 2560×1440 (documentCaptureSize). The document VIDEO is still
+//       capped aggressively (bitrate + frame rate), so a higher camera
+//       resolution does not blow up its size.
 //
 // Tune the knobs below to trade size against quality without hunting through
 // the capture components.
@@ -35,6 +38,46 @@ export const CAPTURE_HEIGHT = 480;
 // --- Document camera (higher res so the OCR still stays readable) ----------
 export const DOCUMENT_CAPTURE_WIDTH = 1920;
 export const DOCUMENT_CAPTURE_HEIGHT = 1080;
+/** The document camera on a device that can carry it (documentCaptureSize). */
+export const DOCUMENT_CAPTURE_WIDTH_HIGH = 2560;
+export const DOCUMENT_CAPTURE_HEIGHT_HIGH = 1440;
+/** A device needs at least this many cores and this much memory (GB) for the higher size. */
+const HIGH_CAPTURE_MIN_CORES = 6;
+const HIGH_CAPTURE_MIN_MEMORY_GB = 4;
+
+/** What a browser says about the device, as far as the capture size needs it. */
+export interface CaptureDevice {
+  hardwareConcurrency?: number;
+  /** Chromium only, in GB, capped at 8; absent on Safari and Firefox. */
+  deviceMemory?: number;
+}
+
+/**
+ * The size the document camera asks for.
+ *
+ * The still is a crop of one video frame, so the card in it has only as many
+ * pixels as the stream gives it. At 1920×1080 a card that fills two thirds of
+ * the frame is about 1,200 px wide, which left the barcode on the back of a
+ * Nigerian driver's licence too soft for the server to decode once the phone's
+ * own video noise reduction had smoothed it (2026-11-21), so its number fell to
+ * a vision model, which misread a letter. 2560×1440 gives the same card 1.8
+ * times the pixels.
+ *
+ * Only on a device that can carry it: the same stream is recorded as the
+ * evidence clip, and encoding a larger frame on a small phone drops frames and
+ * stutters the preview. A browser that does not report its memory is judged on
+ * cores alone. Values are `ideal`, so a camera that cannot reach the size gives
+ * its nearest.
+ */
+export function documentCaptureSize(
+  device: CaptureDevice | undefined = typeof navigator === 'undefined' ? undefined : (navigator as CaptureDevice),
+): VideoCaptureConstraints {
+  const cores = device?.hardwareConcurrency ?? 0;
+  const memory = device?.deviceMemory ?? HIGH_CAPTURE_MIN_MEMORY_GB;
+  return cores >= HIGH_CAPTURE_MIN_CORES && memory >= HIGH_CAPTURE_MIN_MEMORY_GB
+    ? { width: DOCUMENT_CAPTURE_WIDTH_HIGH, height: DOCUMENT_CAPTURE_HEIGHT_HIGH }
+    : { width: DOCUMENT_CAPTURE_WIDTH, height: DOCUMENT_CAPTURE_HEIGHT };
+}
 
 // --- Frame rate (applies to every recorded stream) -------------------------
 export const CAPTURE_FRAMERATE = 15;
@@ -48,12 +91,16 @@ export const DOCUMENT_AUDIO_BITRATE = 32_000; // 32 kbps
 
 // --- Still-image JPEG quality ----------------------------------------------
 export const SELFIE_IMAGE_QUALITY = 0.8; // moderate
-export const DOCUMENT_IMAGE_QUALITY = 0.9; // conservative — keep text sharp
+export const DOCUMENT_IMAGE_QUALITY = 0.95; // conservative — keep text and barcode modules sharp
 
 /** Document stills are never scaled narrower than this (OCR-critical). */
 export const DOCUMENT_MIN_WIDTH = 1080;
-/** Upper bound for document stills — large enough to keep small text legible. */
-export const DOCUMENT_MAX_DIMENSION = 2000;
+/**
+ * Upper bound for document stills. Above the largest crop a 2560×1440 stream
+ * gives, so a still from the camera is never scaled down; it bounds an uploaded
+ * photo, which can be many times larger.
+ */
+export const DOCUMENT_MAX_DIMENSION = 2600;
 
 // ---------------------------------------------------------------------------
 // Shared getUserMedia video constraints

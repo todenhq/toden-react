@@ -80,22 +80,31 @@ afterEach(() => {
 describe('resolveVoiceGuidance', () => {
   it('is on in en-US with no voice when omitted', async () => {
     const { resolveVoiceGuidance } = await freshSpeech();
-    expect(resolveVoiceGuidance()).toEqual({ enabled: true, language: 'en-US', voice: undefined });
+    expect(resolveVoiceGuidance()).toMatchObject({ enabled: true, language: 'en-US', voice: undefined, deviceVoice: false, localVoice: 'any' });
   });
 
   it('still accepts a bare boolean', async () => {
     const { resolveVoiceGuidance } = await freshSpeech();
-    expect(resolveVoiceGuidance(false)).toEqual({ enabled: false, language: 'en-US', voice: undefined });
-    expect(resolveVoiceGuidance(true)).toEqual({ enabled: true, language: 'en-US', voice: undefined });
+    expect(resolveVoiceGuidance(false)).toMatchObject({ enabled: false, language: 'en-US', voice: undefined });
+    expect(resolveVoiceGuidance(true)).toMatchObject({ enabled: true, language: 'en-US', voice: undefined });
   });
 
   it('reads the voice from the object form', async () => {
     const { resolveVoiceGuidance } = await freshSpeech();
-    expect(resolveVoiceGuidance({ voice: 'lyra', language: 'en-GB' })).toEqual({
+    expect(resolveVoiceGuidance({ voice: 'lyra', language: 'en-GB' })).toMatchObject({
       enabled: true,
       language: 'en-GB',
       voice: 'lyra',
     });
+  });
+
+  it('reads a local voice, with a neighbouring one allowed unless switched off', async () => {
+    const { resolveVoiceGuidance } = await freshSpeech();
+    expect(resolveVoiceGuidance({ voice: 'lyra', localVoice: 'female' })).toMatchObject({ localVoice: 'female', localVoiceNeighbours: true });
+    expect(resolveVoiceGuidance({ localVoice: 'any', localVoiceNeighbours: false })).toMatchObject({ localVoice: 'any', localVoiceNeighbours: false });
+    expect(resolveVoiceGuidance({ localVoice: 'random' as never }).localVoice).toBe('any');
+    expect(resolveVoiceGuidance({ localVoice: 'off' }).localVoice).toBe('off');
+    expect(resolveVoiceGuidance({ voice: 'device' })).toMatchObject({ voice: undefined, deviceVoice: true });
   });
 
   it('treats a blank voice as none', async () => {
@@ -162,9 +171,8 @@ describe('speak with a Toden voice', () => {
   it('starts loading the voice as soon as the server is known, before the liveness step', async () => {
     const speech = await freshSpeech();
     // The flow's config provider hands over the server; the root sets the voice.
+    // From 4.4.0 a Toden voice is the default, so the server alone starts it.
     speech.prepareVoiceClips(ASSETS_URL);
-    expect(server.fetch).not.toHaveBeenCalled();
-    speech.configureSpeech({ voice: 'lyra' });
     await vi.waitFor(() => expect(server.urls()).toContain(`${ASSETS_URL}/manifest.json`));
   });
 
@@ -346,8 +354,32 @@ describe('speak with a Toden voice', () => {
   });
 });
 
-describe('without a Toden voice', () => {
+// "The default should be any voice, not device voice; device voice only for
+// older SDKs, unless that was set by the admin" (product owner, 2026-11-21).
+describe('a Toden voice by default', () => {
   it.each([[undefined], [true], [{ enabled: true, language: 'en-GB' }]])(
+    'asks the server for its voices for %j',
+    async (option) => {
+      const speech = await freshSpeech();
+      speech.configureSpeech(option);
+      speech.prepareVoiceClips(ASSETS_URL);
+      await vi.waitFor(() => expect(server.urls()).toContain(`${ASSETS_URL}/manifest.json`));
+    },
+  );
+
+  it("speaks with the device's voice when the server has no voice to give", async () => {
+    // The test manifest says nothing of countries and has no fallback, as an older server.
+    const speech = await freshSpeech();
+    speech.configureSpeech(true);
+    speech.primeSpeech();
+    speech.prepareVoiceClips(ASSETS_URL);
+    speech.speak('Nod your head');
+    await vi.waitFor(() => expect(deviceSpoken()).toEqual(['Nod your head']));
+  });
+});
+
+describe("the device's voice, chosen by the admin", () => {
+  it.each([[{ voice: 'device' }], [{ voice: 'device', language: 'en-GB', localVoice: 'female' as const }]])(
     'never fetches the manifest for %j',
     async (option) => {
       const speech = await freshSpeech();

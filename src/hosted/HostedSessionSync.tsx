@@ -6,6 +6,8 @@ import { useSessionProgress } from '../hooks/useSessionProgress';
 import type { HandoffBootstrapResponse, VerificationApi } from '../services/api';
 import type { VerificationStep } from '../types/config';
 import { resumedApplicationFrom } from '../lib/resumed-application';
+import { resumableProgress } from '../lib/app-country';
+import { useVerificationConfig } from '../context/VerificationConfigContext';
 
 /**
  * Binds a hosted flow to its session: names it, then saves progress as the
@@ -30,6 +32,7 @@ export function HostedSessionSync({
   api: VerificationApi;
 }) {
   const { state, dispatch } = useVerificationContext();
+  const config = useVerificationConfig();
   const restored = useRef(false);
 
   useEffect(() => {
@@ -39,7 +42,8 @@ export function HostedSessionSync({
     // server-side, so a restored capture slot is one whose bytes still exist.
     if (progress && !restored.current) {
       restored.current = true;
-      dispatch({ type: 'RESTORE_PROGRESS', payload: progress });
+      // Not when it was saved in a country this flow no longer offers (lib/app-country.ts).
+      if (resumableProgress(progress, config)) dispatch({ type: 'RESTORE_PROGRESS', payload: progress });
     }
     // The business half already committed: the submitting screen replays it
     // under its own request id rather than sending a second application the

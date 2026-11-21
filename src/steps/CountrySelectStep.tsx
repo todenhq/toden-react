@@ -37,7 +37,10 @@ export function CountrySelectStep() {
   // org's GRANTED countries — the applicant may hold an ID issued anywhere
   // the org can verify. One helper, shared with the continue/back branches.
   const options = applicantCountryOptions(config);
-  const selected = state.selectedCountry ?? null;
+  // The country the app passed marks it and lists it first, ahead of the
+  // location guess; the person can still pick another (lib/app-country.ts).
+  const named = config.appCountry ?? null;
+  const selected = state.selectedCountry ?? named ?? null;
 
   const pick = (country: AnyCountry) => {
     dispatch({ type: 'SET_COUNTRY', payload: country });
@@ -63,6 +66,7 @@ export function CountrySelectStep() {
           countries={options}
           selected={selected}
           geoCountry={config.serverConfig?.geoCountry}
+          appCountry={named}
           onPick={pick}
         />
       ) : (
@@ -73,13 +77,13 @@ export function CountrySelectStep() {
               type="button"
               onClick={() => pick(country)}
               className={cn(
-                'flex w-full items-center gap-3 rounded-xl border p-4 text-left transition-colors',
+                'flex w-full items-center gap-4 rounded-xl border p-4 text-left transition-colors',
                 selected === country
                   ? 'border-primary bg-primary/5 ring-1 ring-primary/40'
                   : 'border-border hover:border-primary/40 hover:bg-muted/40',
               )}
             >
-              <CountryFlag code={country} className="h-8 w-8" title={businessCountryName(country)} />
+              <CountryFlag code={country} className="h-10 w-10" title={businessCountryName(country)} />
               <span className="flex-1 text-base font-medium">{businessCountryName(country)}</span>
               <ChevronRight className="h-4 w-4 text-muted-foreground" />
             </button>

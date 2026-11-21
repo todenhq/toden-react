@@ -34,6 +34,11 @@ function ensureDataUri(base64: string): string {
   return `data:image/jpeg;base64,${base64}`;
 }
 
+/** Whether a data URI holds a JPEG. */
+export function isJpegDataUri(dataUri: string): boolean {
+  return /^data:image\/jpe?g[;,]/i.test(dataUri);
+}
+
 function canvasToBase64(canvas: HTMLCanvasElement, quality: number): string {
   return canvas.toDataURL('image/jpeg', quality);
 }
@@ -118,14 +123,23 @@ export async function compressImage(base64Input: string): Promise<string> {
  *
  * 1. Only downscale when the longest edge exceeds {@link DOCUMENT_MAX_DIMENSION},
  *    and clamp so the width never drops below {@link DOCUMENT_MIN_WIDTH}.
- * 2. Re-encode once at {@link DOCUMENT_IMAGE_QUALITY} (no quality step-down).
+ * 2. Encode at {@link DOCUMENT_IMAGE_QUALITY} (no quality step-down), unless it is
+ *    already a JPEG within the limit, which is returned untouched: one lossy
+ *    encode, never two.
  *
  * A JPEG at this quality/resolution is comfortably within the upload limit.
  */
 export async function compressDocumentImage(base64Input: string): Promise<string> {
-  const img = await loadImage(ensureDataUri(base64Input));
+  const source = ensureDataUri(base64Input);
+  const img = await loadImage(source);
 
   let { width, height } = img;
+
+  // A JPEG already within the size limit is kept as it is. Encoding it again
+  // would only soften it: each lossy pass blurs the fine edges a barcode's
+  // modules and small print are made of, and the camera's still was encoded at
+  // this quality a moment ago (lib/video-crop.ts).
+  if (isJpegDataUri(source) && Math.max(width, height) <= DOCUMENT_MAX_DIMENSION) return source;
 
   // Downscale only oversized captures, and never below the OCR width floor.
   if (Math.max(width, height) > DOCUMENT_MAX_DIMENSION) {

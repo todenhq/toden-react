@@ -31,6 +31,7 @@ import { useText } from '../i18n';
 import { cn } from '../lib/utils';
 import { useVerificationContext } from '../context/VerificationContext';
 import { useVerificationConfig } from '../context/VerificationConfigContext';
+import { setSpeechApplicant } from '../liveness/speech';
 import { hasActiveQuestionnaire } from '../lib/questionnaire';
 import { hasProofOfAddressStep, hasAddressCollectionStep, poaCountryAccepted } from '../lib/post-capture';
 import { hasEmailVerificationStep, hasPhoneVerificationStep } from '../lib/contact-steps';
@@ -224,6 +225,14 @@ const CAPTURE_STEPS: VerificationStep[] = ['document-capture', 'liveness'];
 export function VerificationModal({ open, onClose, showThemeToggle, disableClose, fullScreen }: VerificationModalProps) {
   const { state, dispatch } = useVerificationContext();
   const config = useVerificationConfig();
+  // A workflow that speaks in the applicant's own accent chooses its voice from
+  // the country of the document being verified (liveness/speech.ts): the one
+  // picked in the flow, or the one the app passed. Said again as it changes.
+  const speechCountry = state.selectedCountry ?? config.country ?? null;
+  const speechSeed = config.userId ?? null;
+  useEffect(() => {
+    setSpeechApplicant({ country: speechCountry, seed: speechSeed });
+  }, [speechCountry, speechSeed]);
   const t = useText();
   // Button presses for the verification timeline; named by catalogue key only (lib/click-log.ts).
   useEffect(() => (open ? startClickLog(t) : undefined), [open, t]);

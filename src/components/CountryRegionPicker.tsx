@@ -23,12 +23,14 @@ const REGION_KEYS: Record<Region, string> = {
  * when a workflow offers many countries (Global Documents) — a flat 200-country
  * list is unusable, so this adds a pinned search box and continent headers over
  * a bounded scroll area. Big touch targets (this is a primary step, not a form
- * field), with SVG flags for cross-platform consistency.
+ * field): a 40px flag in a 72px row, the same on React Native and Flutter, so a
+ * thumb lands on the row it aimed at. SVG flags for cross-platform consistency.
  */
 export function CountryRegionPicker({
   countries,
   selected,
   geoCountry,
+  appCountry,
   onPick,
 }: {
   countries: string[];
@@ -39,6 +41,12 @@ export function CountryRegionPicker({
    * see rather than something to scroll for.
    */
   geoCountry?: string | null;
+  /**
+   * The country the app passed (lib/app-country.ts). It takes the top row in
+   * place of the location guess, without the "Your location" tag: the app said
+   * so, the visitor's IP did not.
+   */
+  appCountry?: string | null;
   onPick: (country: AnyCountry) => void;
 }) {
   const t = useText();
@@ -50,7 +58,7 @@ export function CountryRegionPicker({
           (c) => regionCountryName(c).toLowerCase().includes(q) || c.toLowerCase().includes(q),
         )
       : countries;
-    const geo = geoCountry?.toUpperCase();
+    const geo = (appCountry ?? geoCountry)?.toUpperCase();
     // Still subject to the search: typing narrows to what was asked for rather
     // than keeping a row that does not match it.
     const hit = geo && visible.includes(geo) ? geo : null;
@@ -58,7 +66,7 @@ export function CountryRegionPicker({
       pinned: hit,
       groups: groupCountriesByRegion(hit ? visible.filter((c) => c !== hit) : visible),
     };
-  }, [countries, query, geoCountry]);
+  }, [countries, query, geoCountry, appCountry]);
 
   return (
     // Fill the parent (the step body is flex-col h-full): search pinned, list
@@ -84,17 +92,19 @@ export function CountryRegionPicker({
             type="button"
             onClick={() => onPick(pinned as AnyCountry)}
             className={cn(
-              'flex w-full items-center gap-3 rounded-xl border p-4 text-left transition-colors',
+              'flex w-full items-center gap-4 rounded-xl border p-4 text-left transition-colors',
               selected === pinned
                 ? 'border-primary bg-primary/5 ring-1 ring-primary/40'
                 : 'border-border hover:border-primary/40 hover:bg-muted/40',
             )}
           >
-            <CountryFlag code={pinned} className="h-8 w-8" title={regionCountryName(pinned)} />
+            <CountryFlag code={pinned} className="h-10 w-10" title={regionCountryName(pinned)} />
             <span className="flex-1 text-base font-medium">{regionCountryName(pinned)}</span>
-            <span className="shrink-0 rounded-full border border-primary/30 bg-primary/10 px-2 py-0.5 text-[11px] font-medium text-primary">
-              {t('selectDocument.country.yourLocation')}
-            </span>
+            {!appCountry && (
+              <span className="shrink-0 rounded-full border border-primary/30 bg-primary/10 px-2 py-0.5 text-[11px] font-medium text-primary">
+                {t('selectDocument.country.yourLocation')}
+              </span>
+            )}
             <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />
           </button>
         )}
@@ -113,13 +123,13 @@ export function CountryRegionPicker({
                     type="button"
                     onClick={() => onPick(c.code)}
                     className={cn(
-                      'flex w-full items-center gap-3 rounded-xl border p-4 text-left transition-colors',
+                      'flex w-full items-center gap-4 rounded-xl border p-4 text-left transition-colors',
                       selected === c.code
                         ? 'border-primary bg-primary/5 ring-1 ring-primary/40'
                         : 'border-border hover:border-primary/40 hover:bg-muted/40',
                     )}
                   >
-                    <CountryFlag code={c.code} className="h-8 w-8" title={c.name} />
+                    <CountryFlag code={c.code} className="h-10 w-10" title={c.name} />
                     <span className="flex-1 text-base font-medium">{c.name}</span>
                     <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />
                   </button>

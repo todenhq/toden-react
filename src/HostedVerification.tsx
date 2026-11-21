@@ -36,6 +36,8 @@ export function HostedVerification({
   token,
   serverUrl = '',
   embedded = false,
+  country,
+  lockCountry,
   appearance,
   onClose,
   onReady,
@@ -237,6 +239,8 @@ export function HostedVerification({
       api={api}
       bootstrap={bootstrap}
       embedded={embedded}
+      country={country}
+      lockCountry={lockCountry}
       onClose={onClose}
       onStart={onStart}
       onStepChange={onStepChange}

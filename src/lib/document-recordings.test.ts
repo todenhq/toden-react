@@ -4,7 +4,9 @@ import { describe, expect, it, vi } from 'vitest';
 import { initialVerificationState, verificationReducer } from '../context/VerificationContext';
 import type { VerificationState } from '../context/types';
 import { uploadCaptureVideos } from '../steps/submit-helpers';
-import { emptyRecordingCaptures, isCurrentCapture, renewCapture } from './document-recordings';
+import {
+  emptyRecordingCaptures, isCurrentCapture, MIN_RECORDED_MS, recordingShortBy, recordingSideOf, renewCapture,
+} from './document-recordings';
 
 // A side's recording must be the recording of the photo submitted for that side:
 // the server compares the two to catch an injected capture.
@@ -122,8 +124,8 @@ describe('the camera from the front to the back', () => {
     expect(src).toContain('enabled: cameraActive && camera.isReady && !captureZoom,');
   });
 
-  it('records each side on the one stream, and nothing during the turn-over', () => {
-    expect(src).toContain('cameraActive ? (phase === "back" ? "back" : "front") : null;');
+  it('records each side on the one stream, the back from its turn-over on', () => {
+    expect(src).toContain('const recordingSide = recordingSideOf({ cameraActive, phase, turningOver });');
     expect(src).toContain('if (!camera.stream || !recordingSide) return;');
     expect(src).toContain('}, [camera.stream, recordingSide, dispatch]);');
   });
@@ -172,5 +174,42 @@ describe('the capture step renews a side capture whenever a new one begins', () 
   it('keeps each recording in its own chunks', () => {
     expect(src).not.toContain('docChunksRef');
     expect(src).toContain('let chunks: Blob[] = [];');
+  });
+});
+
+// The server needs a recording long enough to read: three readings, taken
+// twice a second. A back photographed a second after its recording began was
+// "not checked" on 4 of 11 two-sided captures.
+describe('a recording long enough to be checked', () => {
+  it('records the back from the turn-over that leads to it', () => {
+    expect(recordingSideOf({ cameraActive: true, phase: 'front', turningOver: false })).toBe('front');
+    expect(recordingSideOf({ cameraActive: false, phase: 'front-preview', turningOver: true })).toBe('back');
+    expect(recordingSideOf({ cameraActive: true, phase: 'back', turningOver: false })).toBe('back');
+  });
+
+  it('records nothing while a side is only being looked at', () => {
+    expect(recordingSideOf({ cameraActive: false, phase: 'front-preview', turningOver: false })).toBeNull();
+    expect(recordingSideOf({ cameraActive: false, phase: 'back-preview', turningOver: false })).toBeNull();
+  });
+
+  it('holds the photo until the recording has run long enough for three readings', () => {
+    // Read twice a second: three readings need more than a second of recording.
+    expect(MIN_RECORDED_MS).toBeGreaterThanOrEqual(2000);
+    expect(recordingShortBy(1000, 1000)).toBe(MIN_RECORDED_MS);
+    expect(recordingShortBy(1000, 1000 + MIN_RECORDED_MS - 300)).toBe(300);
+    expect(recordingShortBy(1000, 1000 + MIN_RECORDED_MS)).toBe(0);
+    expect(recordingShortBy(1000, 99_999)).toBe(0);
+  });
+
+  it('keeps nobody waiting where nothing is recording', () => {
+    expect(recordingShortBy(null, 5000)).toBe(0);
+  });
+
+  it('holds both the automatic photo and the shutter in the step', () => {
+    const step = readFileSync(new URL('../steps/DocumentCaptureStep.tsx', import.meta.url).pathname, 'utf8');
+    expect(step).toContain('holdCapture: !recordedEnough,');
+    expect(step).toContain('const short = recordingShortBy(startedAt, performance.now());');
+    const detector = readFileSync(new URL('../hooks/useDocumentDetection.ts', import.meta.url).pathname, 'utf8');
+    expect(detector).toContain('if (!holdRef.current) {');
   });
 });

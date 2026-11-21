@@ -20,6 +20,16 @@ export interface HostedVerificationProps {
    */
   token: string;
   /**
+   * The country this person is from (ISO-2), as the hosting page read it off
+   * its link (`?country=GH`). On a flow that offers several countries the
+   * picker opens on it when the flow offers it; with {@link lockCountry} there
+   * is no picker. Wins over a country the session already carries. See
+   * `VerificationConfig.country`.
+   */
+  country?: string;
+  /** With {@link country}: fix the flow to that country (`?lockCountry=1` on the link). */
+  lockCountry?: boolean;
+  /**
    * The API origin to call DIRECTLY, e.g. `https://api.toden.co`. Absent
    * (the default, `''`), every request goes same-origin through the hosting
    * page's `/api` proxy — which was how the hosted page always ran, and why

@@ -28,6 +28,7 @@ import type {
 } from '../types/config';
 import type { SubjectType, WorkflowBusinessConfig } from '../types/business';
 import { handoffCaptureNeeded } from '../lib/handoff-capture';
+import { applyAppCountry, hostedCountry, type AppCountryConfig } from '../lib/app-country';
 // The hosted flow itself: providers seeded from the session's config snapshot,
 // wrapping the same steps an embedded <Verification/> runs. Split out of
 // HostedVerification.tsx, which is now just the entry point and its three terminal
@@ -42,6 +43,8 @@ export function HostedFlow({
   api,
   bootstrap,
   embedded = false,
+  country,
+  lockCountry,
   onClose,
   onStart,
   onStepChange,
@@ -54,6 +57,9 @@ export function HostedFlow({
   bootstrap: HandoffBootstrapResponse;
   /** Mounted inside a host application (see HostedVerification.embedded). */
   embedded?: boolean;
+  /** The country the link named for this person, and whether the flow is fixed to it (hosted-props.ts). */
+  country?: string;
+  lockCountry?: boolean;
   onClose?: () => void;
   onStart?: () => void;
   onStepChange?: (step: import('../types/config').VerificationStep) => void;
@@ -81,6 +87,18 @@ export function HostedFlow({
     subjectType: isBusiness ? 'business' : snap.subjectType,
   });
   const cameraNeeded = snap.deviceHandoff !== false && captureNeeded;
+  // The country named for this person: the link's own (`?country=`) first,
+  // else the one the session carries from the app that minted it. Applied onto
+  // the countries the flow offers, exactly as the embedded SDK applies its
+  // `country` prop (lib/app-country.ts).
+  const named = hostedCountry(country) ?? snap.appCountry;
+  const locked = country ? lockCountry === true : snap.lockCountry === true;
+  const placed = applyAppCountry<AppCountryConfig>(
+    { country: leg.country, countries: leg.countries as Array<{ country: string }> | undefined, lockCountry: locked },
+    named,
+  );
+  // What a phone continuing this session must carry too.
+  const carried = placed.appCountry ? { ...snap, appCountry: placed.appCountry, lockCountry: locked } : snap;
   const serverConfigOverride: ServerSdkConfig = {
     status: 'ready',
     idTypes: bootstrap.idTypes,
@@ -118,8 +136,9 @@ export function HostedFlow({
         // Business snapshots carry no top-level country — the registry country
         // stands in so the context never sees undefined. (`leg` = the snapshot
         // with the applicant workflow's capture keys overlaid, when mapped.)
-        country={(leg.country ?? snap.business?.country) as AnyCountry}
-        countries={leg.countries as Array<{ country: AnyCountry; idTypes?: AnyIdType[] }> | undefined}
+        country={(placed.country ?? snap.business?.country) as AnyCountry}
+        countries={placed.countries as Array<{ country: AnyCountry; idTypes?: AnyIdType[] }> | undefined}
+        appCountry={placed.appCountry as AnyCountry | undefined}
         idTypes={leg.idTypes as AnyIdType[] | undefined}
         idSelectionLayout={leg.idSelectionLayout}
         // Deliberately from `snap`, not `leg`: multi-ID is KYC-only and the
@@ -171,7 +190,7 @@ export function HostedFlow({
         assetsBasePath={snap.assetsBasePath}
       >
         <HostedFlowInner
-          snapshot={snap}
+          snapshot={carried}
           cameraNeeded={cameraNeeded}
           mobileOnly={snap.requireMobileDevice === true}
           handoffDisabled={snap.deviceHandoff === false}
