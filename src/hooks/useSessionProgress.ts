@@ -3,6 +3,7 @@ import type { VerificationApi } from '../services/api';
 import type { VerificationState } from '../context/types';
 import { progressFromState, progressFingerprint, isUntouchedProgress } from '../lib/session-progress';
 import { progressSaveStopsFlow, sessionEndAction, type SessionEndAction } from '../lib/session-cancelled';
+import { onJourneyUrgent, type JourneyEventCode } from '../lib/step-log';
 
 /** Typing shouldn't put a request on the wire per keystroke. */
 const SAVE_DEBOUNCE_MS = 800;
@@ -66,4 +67,42 @@ export function useSessionProgress(
     return () => clearTimeout(id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [api, sessionId, fingerprint]);
+
+  // Saved at once, not on the debounce, when something on the journey says the
+  // applicant may be about to leave (lib/step-log.ts recordJourneyEvent): a
+  // refused camera, a failed upload, Close, the tab hidden or closing. With
+  // keepalive, so the request outlives the page. Best-effort, as above.
+  const latest = useRef({ api, state, onEnded });
+  latest.current = { api, state, onEnded };
+  useEffect(
+    () =>
+      onJourneyUrgent((code) => {
+        const { api: currentApi, state: current, onEnded: ended } = latest.current;
+        const urgent = urgentProgress(current, code);
+        if (!urgent) return;
+        void currentApi.saveProgress(urgent.sessionId, urgent.payload, { keepalive: true }).catch((err: unknown) => {
+          if (!progressSaveStopsFlow(err)) return;
+          const action = sessionEndAction(err);
+          if (action) ended?.(action);
+        });
+      }),
+    [],
+  );
+}
+
+/**
+ * PURE. The save an urgent journey event asks for, or null when there is none
+ * to make: no session, a cancelled, declined or submitted one, or nothing done
+ * yet. Pressing Close is the exception to the last: closing on the opening
+ * screen is exactly what drop-off insights needs to see.
+ */
+export function urgentProgress(
+  state: VerificationState,
+  code: JourneyEventCode,
+): { sessionId: string; payload: ReturnType<typeof progressFromState> } | null {
+  if (!state.sessionId || state.sessionCancelled || state.sessionDeclined) return null;
+  const payload = progressFromState(state);
+  if (payload.step === 'submitted') return null;
+  if (code !== 'flow_closed' && isUntouchedProgress(payload, state.openingStep)) return null;
+  return { sessionId: state.sessionId, payload };
 }

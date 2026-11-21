@@ -1,5 +1,6 @@
 import type { VerificationStep, AnyIdType, AnyCountry, QuestionnaireAnswerValue, PoaDocumentType } from '../types/config';
 import type { ApiStatus, VerificationError } from '../types/verification';
+import type { SelfieScene } from '../lib/selfie-review';
 import type { AddressBookReuse, AddressBookSaveChoice } from '../lib/address-book';
 import type { ApplicantRole, BusinessDocumentKey, KeyPersonRole } from '../types/business';
 
@@ -307,6 +308,9 @@ export interface VerificationState {
 
   // Step 4 – Liveness / selfie
   selfieImage: string | null;
+  /** The camera frame that selfie was cut from, which the full-screen review
+   *  shows. Null when unknown. In memory only, like the image; never uploaded. */
+  selfieScene: SelfieScene | null;
   /**
    * The selfie upload's progress report, written by LivenessStep. The
    * biometric scopes hand over before the upload lands (the review is off),
@@ -512,7 +516,7 @@ export type VerificationAction =
   | { type: 'SET_MEDIA_ID'; payload: { mediaType: keyof MediaIds; mediaId: string | undefined } }
   | { type: 'CLEAR_MEDIA_IDS' }
   // Selfie
-  | { type: 'SET_SELFIE_IMAGE'; payload: string }
+  | { type: 'SET_SELFIE_IMAGE'; payload: string; scene?: SelfieScene | null }
   | { type: 'CLEAR_SELFIE_IMAGE' }
   | { type: 'SET_SELFIE_UPLOAD'; payload: import('../lib/selfie-upload-wait').SelfieUploadState }
   // Video blobs

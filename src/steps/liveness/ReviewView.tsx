@@ -1,7 +1,10 @@
 'use client';
 
+import { useState, type CSSProperties } from 'react';
 import { Check, CircleCheck, Loader2, RotateCcw, TriangleAlert } from '../../components/icons';
 import { Button } from '../../components/ui/button';
+import { livenessCutout, windowTop, type Size } from '../../lib/liveness-cutout';
+import { sceneOnReview, uncovered, type SelfieScene } from '../../lib/selfie-review';
 import { ImmersiveFrame } from './ImmersiveFrame';
 import { Panel, Pill } from './surfaces';
 
@@ -10,12 +13,20 @@ import { Panel, Pill } from './surfaces';
 // same window, so it reads as the camera held still rather than as a
 // different screen.
 //
+// What it shows is the camera frame the selfie was cut from, drawn as the
+// camera drew it and under the same light blur, moved so the face sits in the
+// window and made smaller only if the face would spill over it
+// (lib/selfie-review.ts). Without that frame (a selfie that is a whole frame
+// itself, or one from before a reload) the photo fills the screen.
+//
 // Only with a photo to show. A restored session has the uploaded media id and
 // no bytes, and keeps the modal's own review.
 // ---------------------------------------------------------------------------
 
 export interface ReviewViewProps {
   preview: string;
+  /** The camera frame the photo was cut from. Null when there is none. */
+  scene: SelfieScene | null;
   title: string;
   /** A line over the buttons: the finished-step note, or the blurry notice. */
   note: string | null;
@@ -32,7 +43,31 @@ export interface ReviewViewProps {
   onBack: () => void;
 }
 
+/** Where the picture stops short of the screen, it fades out over this. */
+const FADE = 56;
+const fade = (to: 'right' | 'bottom', start: boolean, end: boolean) =>
+  (start || end) &&
+  `linear-gradient(to ${to}, ${start ? 'transparent' : '#000'}, #000 ${FADE}px, #000 calc(100% - ${FADE}px), ${end ? 'transparent' : '#000'})`;
+
+function sceneStyle(scene: SelfieScene, frame: Size): CSSProperties {
+  const window = livenessCutout(frame);
+  const at = sceneOnReview(scene, scene.face, frame, window, windowTop(frame, window));
+  const gaps = uncovered(at, frame);
+  const masks = [fade('right', gaps.left, gaps.right), fade('bottom', gaps.top, gaps.bottom)].filter(Boolean).join(', ');
+  return {
+    position: 'absolute',
+    left: at.left,
+    top: at.top,
+    width: at.width,
+    height: at.height,
+    maxWidth: 'none',
+    ...(masks && { maskImage: masks, WebkitMaskImage: masks, maskComposite: 'intersect', WebkitMaskComposite: 'source-in' }),
+  };
+}
+
 export function ReviewView(p: ReviewViewProps) {
+  const [frame, setFrame] = useState<Size | null>(null);
+  const laidOut = frame !== null && frame.width > 0 && frame.height > 0;
   // One line at a time, the most pressing first: a failed upload, then a
   // retry in progress, then the note about the photo.
   const message = p.uploadError ? (
@@ -51,8 +86,15 @@ export function ReviewView(p: ReviewViewProps) {
     <ImmersiveFrame
       onBack={p.onBack}
       blurs={p.blurs}
+      onSize={setFrame}
       // No mirror: the still was captured mirrored already.
-      preview={<img src={p.preview} alt="" className="h-full w-full object-cover" />}
+      preview={
+        p.scene ? (
+          laidOut && <img src={p.scene.image} alt="" data-selfie-scene style={sceneStyle(p.scene, frame)} />
+        ) : (
+          <img src={p.preview} alt="" className="h-full w-full object-cover" />
+        )
+      }
       cutout={(window) => (
         <div
           className="relative h-full w-full overflow-hidden border-4 border-[var(--verification-success)]"

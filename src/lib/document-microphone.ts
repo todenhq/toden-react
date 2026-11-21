@@ -1,6 +1,8 @@
 // One go at the microphone for the document clip. A plain function so the
 // awkward part, a grant landing after the camera has already closed, is tested.
 
+import { recordJourneyEvent } from './step-log';
+
 type Media = { getUserMedia?: MediaDevices['getUserMedia'] } | undefined;
 
 /**
@@ -22,7 +24,12 @@ export function openMicrophoneSession(
     onSettled(stream);
   };
   if (media?.getUserMedia) {
-    media.getUserMedia({ audio: true, video: false }).then(finish, () => finish(null));
+    media.getUserMedia({ audio: true, video: false }).then(finish, (err: unknown) => {
+      // A refusal goes on the journey (drop-off insights); a missing microphone does not.
+      const name = (err as { name?: unknown } | null)?.name;
+      if (name === 'NotAllowedError' || name === 'PermissionDeniedError') recordJourneyEvent('microphone_denied');
+      finish(null);
+    });
   } else {
     finish(null);
   }

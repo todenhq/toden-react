@@ -193,8 +193,17 @@ describe('the capture ring in the liveness step', () => {
   it('is on the frame from positioning to the shutter, over a neutral track', () => {
     // The border is the ring's track for the whole test; the review screen's
     // frame wears the same faint primary, so the two screens share one line.
-    expect(live).toContain('{ringOn && <WindowRing');
-    expect(live).toContain("'color-mix(in srgb, var(--primary) 35%, transparent)'");
+    // Head directions wear the four-sided line instead (SideRing): one or the
+    // other is on the frame, never both and never neither.
+    expect(live).toContain('{ringOn && !p.sides && (');
+    expect(live).toContain('{ringOn && p.sides && (');
+    // The tick shows after every gesture, head directions included: it is
+    // not held back for the last step (user, 2026-11-17).
+    expect(live).toContain("{p.phase === 'challenge_passed' && (");
+    expect(live).not.toContain('p.step >= p.total');
+    expect(live).toContain('<WindowRing window={window} progressRef={p.progressRef}');
+    expect(live).toContain(': RING_TRACK;');
+    expect(windowRing).toContain("RING_TRACK = 'color-mix(in srgb, var(--primary) 35%, transparent)'");
     expect(step).toContain('progressRef={liveness.livenessProgressRef}');
   });
 

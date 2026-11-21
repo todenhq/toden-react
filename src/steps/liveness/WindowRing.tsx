@@ -17,8 +17,25 @@ import { outlineSegments, segmentFill } from '../../lib/window-segments';
 //
 // Paced by the same two functions as CaptureRing and driven the same way: the
 // hook's progress is read from a ref every frame and one attribute per part is written.
+//
+// It runs a little way OUTSIDE the window, with a clear gap between the two,
+// as Apple's face recognition ring does: the line reads as a ring round the
+// face rather than as the cutout's own edge (user, 2026-11-17).
 
-const STROKE = 4;
+// Heavier than the frame's other lines, so it reads clearly round the face
+// over a busy camera picture (user, 2026-11-17).
+export const RING_STROKE = 6;
+const STROKE = RING_STROKE;
+/** The line's colour while all is well: a faint wash of the workflow's colour. */
+export const RING_TRACK = 'color-mix(in srgb, var(--primary) 35%, transparent)';
+/** The clear gap between the window's edge and the inside of the line. */
+export const RING_GAP = 7;
+/** How far the line reaches past the window, its stroke included. */
+export const RING_REACH = RING_GAP + STROKE;
+const REACH = RING_REACH;
+/** The outline the line's centre follows: grown past the window by the gap. */
+export const RING_INSET = -(RING_GAP + STROKE / 2);
+const INSET = RING_INSET;
 
 export function WindowRing({
   window,
@@ -36,8 +53,8 @@ export function WindowRing({
   const linesRef = useRef<(SVGPathElement | null)[]>([]);
   const targetRef = useRef(0);
   const shownRef = useRef(0);
-  const length = useMemo(() => windowOutline(window, STROKE / 2).length, [window]);
-  const parts = useMemo(() => outlineSegments(window, STROKE / 2, segments), [window, segments]);
+  const length = useMemo(() => windowOutline(window, INSET).length, [window]);
+  const parts = useMemo(() => outlineSegments(window, INSET, segments), [window, segments]);
   const cap = parts.length > 1 ? 'round' : 'butt';
 
   useEffect(() => {
@@ -67,10 +84,11 @@ export function WindowRing({
 
   return (
     <svg
-      className="pointer-events-none absolute inset-0"
-      width={window.width}
-      height={window.height}
-      viewBox={`0 0 ${window.width} ${window.height}`}
+      className="pointer-events-none absolute"
+      style={{ left: -REACH, top: -REACH }}
+      width={window.width + REACH * 2}
+      height={window.height + REACH * 2}
+      viewBox={`${-REACH} ${-REACH} ${window.width + REACH * 2} ${window.height + REACH * 2}`}
       fill="none"
       aria-hidden="true"
     >

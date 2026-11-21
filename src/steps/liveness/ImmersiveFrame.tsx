@@ -23,9 +23,7 @@ import { SurfaceBlurContext } from './surfaces';
 //   surround  blur, then a tint of the flow's background, over everything but
 //             the window
 //   cutout    what is drawn ON the window: its line and the marks inside it
-//   above     the instruction, resting just above the window, and over it
-//             whatever is narrow enough to stand BETWEEN the back and close
-//             buttons (the gesture picture)
+//   above     the instruction, resting just above the window
 //   below     what starts just under it: the step count, or the retry
 //   footer    what rests on the bottom edge
 // ---------------------------------------------------------------------------
@@ -34,7 +32,10 @@ import { SurfaceBlurContext } from './surfaces';
 const CONTROLS_BAND = 60;
 /** The gap over those buttons (ImmersiveControls). */
 const CONTROLS_TOP_GAP = 8;
-const BLUR = 'blur(11px)';
+// Barely there, as Apple's face recognition camera: the room stays readable
+// round the window, softened rather than frosted. Lowered twice at the user's
+// asking (2026-11-17): 5px still read as frosted glass.
+const BLUR = 'blur(2px)';
 
 export function ImmersiveFrame({
   preview,
@@ -50,10 +51,8 @@ export function ImmersiveFrame({
 }: {
   preview: React.ReactNode;
   cutout: (window: Size) => React.ReactNode;
-  /** Given the height there is under the back and close buttons (`room`),
-   *  and the height up to the top of those buttons (`reach`): what is wide
-   *  keeps to the first, what is narrow and centred may use the second. */
-  above: (room: number, reach: number) => React.ReactNode;
+  /** Given the height there is under the back and close buttons. */
+  above: (room: number) => React.ReactNode;
   below?: React.ReactNode;
   footer?: React.ReactNode;
   /** The height `footer` needs, kept clear of `below`. */
@@ -90,9 +89,6 @@ export function ImmersiveFrame({
   const windowTop = windowTopOf(size, window);
   const windowBottom = windowTop + window.height;
   const room = Math.max(0, windowTop - 20 - CONTROLS_BAND);
-  // The block starts level with the top of the buttons, not under them: the
-  // buttons sit at the sides, and the middle of that band is free.
-  const reach = Math.max(0, windowTop - 20 - CONTROLS_TOP_GAP);
   const clip = laidOut ? `path(evenodd, "${tintPath(size, window)}")` : undefined;
 
   return (
@@ -140,7 +136,7 @@ export function ImmersiveFrame({
                 height: aboveHeight(room) + CONTROLS_BAND - CONTROLS_TOP_GAP,
               }}
             >
-              {above(room, reach)}
+              {above(room)}
             </div>
             {below && (
               <div

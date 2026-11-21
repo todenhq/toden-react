@@ -127,9 +127,11 @@ describe('the ways out', () => {
   });
 
   it('the close is the one the modal header X calls, null when it cannot close', () => {
-    expect(read('components/VerificationModal.tsx')).toContain(
-      '<ImmersiveCloseContext.Provider value={dismissBlocked ? null : onClose}>',
-    );
+    // The header X and the immersive close are one handler, which also puts
+    // the applicant's Close on the journey (drop-off insights).
+    const modal = read('components/VerificationModal.tsx');
+    expect(modal).toContain('<ImmersiveCloseContext.Provider value={dismissBlocked ? null : closeByApplicant}>');
+    expect(modal).toContain('onClose={closeByApplicant}');
     expect(read('components/PhotoCamera.tsx')).toContain('const flowClose = useImmersiveClose();');
   });
 

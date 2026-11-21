@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { mergeWorkflowConfig, overlayApplicantWorkflow } from './workflow-merge';
+import { mergeVoiceGuidance, mergeWorkflowConfig, overlayApplicantWorkflow } from './workflow-merge';
 
 describe('mergeWorkflowConfig', () => {
   it('flow config wins over overlapping props', () => {
@@ -151,5 +151,61 @@ describe('mergeWorkflowConfig', () => {
       { country: 'NG' } as { country: string; maxLivenessAttempts?: number },
     );
     expect(leg.maxLivenessAttempts).toBe(3);
+  });
+
+  it('livenessDirectionCount reaches the config from the workflow, on the mount and on a mapped applicant leg', () => {
+    const props: { country: string; apiKey: string; livenessDirectionCount?: number } = { country: 'NG', apiKey: 'pk' };
+    expect(mergeWorkflowConfig({ country: 'NG', livenessGestureSet: 'directions', livenessDirectionCount: 2 }, props).livenessDirectionCount).toBe(2);
+    // A workflow without it leaves the SDK's own default, 3.
+    expect(mergeWorkflowConfig({ country: 'NG' }, props).livenessDirectionCount).toBeUndefined();
+    const leg = overlayApplicantWorkflow(
+      { id: 'wf_applicant', config: { country: 'NG', livenessDirectionCount: 4 } },
+      { country: 'NG' } as { country: string; livenessDirectionCount?: number },
+    );
+    expect(leg.livenessDirectionCount).toBe(4);
+  });
+});
+
+// The voice guidance contract (kyc-core docs/VOICE_GUIDANCE.md): the SDK prop
+// overrides the workflow key by key, the one exception to "flow wins".
+describe('voiceGuidance: the prop over the workflow, key by key', () => {
+  const workflow = { enabled: true, language: 'en-GB', voice: 'lyra' };
+
+  it('a prop voice keeps the workflow enabled and language', () => {
+    const merged = mergeWorkflowConfig(
+      { country: 'NG', voiceGuidance: workflow } as never,
+      { country: 'NG', apiKey: 'pk_test_x', voiceGuidance: { voice: 'rory' } },
+    );
+    expect(merged.voiceGuidance).toEqual({ enabled: true, language: 'en-GB', voice: 'rory' });
+  });
+
+  it('a bare boolean prop overrides enabled only', () => {
+    expect(mergeVoiceGuidance(workflow, false)).toEqual({ enabled: false, language: 'en-GB', voice: 'lyra' });
+  });
+
+  it('a prop object over a bare boolean workflow', () => {
+    expect(mergeVoiceGuidance(false, { voice: 'rory' })).toEqual({ enabled: false, voice: 'rory' });
+    expect(mergeVoiceGuidance(true, { enabled: false })).toEqual({ enabled: false });
+  });
+
+  it('keys the prop leaves undefined keep the workflow value', () => {
+    expect(mergeVoiceGuidance(workflow, { voice: undefined, language: 'fr-FR' })).toEqual({
+      enabled: true,
+      language: 'fr-FR',
+      voice: 'lyra',
+    });
+  });
+
+  it('no prop leaves the workflow value as it is, a bare boolean included', () => {
+    expect(mergeVoiceGuidance(workflow, undefined)).toBe(workflow);
+    expect(mergeVoiceGuidance(false, undefined)).toBe(false);
+  });
+
+  it('the prop alone when the workflow sets none', () => {
+    const merged = mergeWorkflowConfig(
+      { country: 'NG' },
+      { country: 'NG', apiKey: 'pk_test_x', voiceGuidance: true },
+    );
+    expect(merged.voiceGuidance).toBe(true);
   });
 });

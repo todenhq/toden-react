@@ -44,6 +44,12 @@ export interface FlashResult {
   onsets?: number[];
 }
 
+/** The palette colours by name, in the given order (Core's pick); null when any is unknown. */
+export function flashSequenceNamed(names: readonly string[]): FlashColor[] | null {
+  const colours = names.map((n) => PALETTE.find((c) => c.name === n));
+  return colours.every((c): c is FlashColor => !!c) && colours.length > 0 ? colours : null;
+}
+
 export function generateFlashSequence(count = 4): FlashColor[] {
   const pool = [...PALETTE];
   for (let i = pool.length - 1; i > 0; i--) {

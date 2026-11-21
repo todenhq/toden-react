@@ -17,6 +17,7 @@ import { resolveIdTypeDefinition } from '../utils/id-definitions';
 import { VerificationError, type VerificationErrorCode } from '../types/verification';
 import { safeReportError } from '../lib/errors';
 import { useDeviceIntelSetup } from '../lib/use-device-intel-setup';
+import { prepareVoiceClips } from '../liveness/speech';
 import { withoutUnchosenIdTypes } from '../lib/chosen-only-ids';
 import { isRetiredIdType } from '../lib/retired-id-types';
 
@@ -154,6 +155,13 @@ export interface VerificationConfigValue {
   maxLivenessAttempts?: number | false;
   /** Light theme while the liveness camera is on. On unless `false`. */
   livenessBrightScreen?: boolean;
+  /** A face icon acts out each liveness gesture. On unless `false`. */
+  livenessGestureGuide?: boolean;
+  /** Which liveness gestures are asked for. Unset is `classic`. */
+  livenessGestureSet?: 'directions' | 'classic';
+  /** How many head directions a run asks for with `directions`: 2 to 4, unset
+   *  is 3. Every run includes a head turn, left or right. */
+  livenessDirectionCount?: number;
   /** Show the captured selfie, with Retake and Continue, before moving on.
    *  Off unless `true`; the liveness capture otherwise hands straight over. */
   selfieReview?: boolean;
@@ -191,9 +199,8 @@ export interface VerificationConfigValue {
    */
   requireMobileDevice?: boolean;
   /**
-   * Base path (or absolute URL) where gesture GIFs are served from.
-   * Defaults to `'/kyc-assets'`. Copy `node_modules/@toden/react/gifs/`
-   * to that path, or set an absolute CDN URL to serve them remotely.
+   * Base path (or absolute URL) of the integrator's own copy of the face
+   * tracking files, tried first at `<assetsBasePath>/face-mesh/`.
    */
   assetsBasePath?: string;
   /** Branding: company name, logo, primary color, theme. */
@@ -375,6 +382,16 @@ export function VerificationConfigProvider({ children, apiOverride, serverConfig
   // Device Intelligence: the upload header + early entropy collection.
   useDeviceIntelSetup(config.deviceIntelligence, config.previewMode);
 
+  // The workflow's Toden voice starts loading as soon as the server is known,
+  // not when the liveness step opens, so the first prompt is not said in the
+  // device voice while the clips are still coming (user, 2026-11-20). The
+  // voice itself is set by configureSpeech in the flow's root; whichever of the
+  // two comes second starts the load, once. Not for a flow with no liveness.
+  useEffect(() => {
+    if (config.enableLiveness === false) return;
+    prepareVoiceClips(api.voiceAssetsUrl);
+  }, [api, config.enableLiveness]);
+
   // Guards onError so a fatal config failure is reported to the consumer at
   // most once per API client (StrictMode mounts the effect twice in dev).
   const reportedErrorRef = useRef<VerificationApi | null>(null);
@@ -535,6 +552,9 @@ export function VerificationConfigProvider({ children, apiOverride, serverConfig
       config.flashSequenceLength,
       config.maxLivenessAttempts,
       config.livenessBrightScreen,
+      config.livenessGestureGuide,
+      config.livenessGestureSet,
+      config.livenessDirectionCount,
       config.selfieReview,
       config.deviceIntelligence,
       config.deviceHandoff,

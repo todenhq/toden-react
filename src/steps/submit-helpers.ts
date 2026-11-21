@@ -10,6 +10,7 @@ import { withRetry } from '../lib/retry';
 import type { VerificationApi, VerifyRequest } from '../services/api';
 import { withSilentCaptureDevice, type SilentCaptureSubmission } from '../lib/silent-capture';
 import { settleSilentUploads, silentCaptureSubmission } from '../lib/silent-capture-store';
+import { journeyUpload } from '../lib/journey';
 
 // Re-exported so existing `./submit-helpers` importers keep working; the token
 // logic now lives in one place (shared with ConsentStep).
@@ -76,7 +77,7 @@ export async function uploadCaptureVideos(
 		if (already) return already;
 		if (!blob) return undefined;
 		try {
-			return await withRetry(() => api.upload(blob, type));
+			return await journeyUpload(type, () => withRetry(() => api.upload(blob, type)));
 		} catch {
 			return undefined; /* non-fatal */
 		}

@@ -139,3 +139,11 @@ export function selfieScore(pose: HeadPose, sharpness: number): number {
     (1 - Math.min(1, Math.abs(pose.roll) / MAX_ROLL));
   return straight / 3 + Math.min(1, sharpness / 120);
 }
+
+/** A box in shares (0..1) of the picture it sits in. */
+export interface ShareBox {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}

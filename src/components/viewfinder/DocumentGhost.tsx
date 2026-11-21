@@ -19,6 +19,16 @@ import { specimenImageSource, specimenKind } from '../../lib/document-specimen';
 //
 // It is never mirrored, even over a mirrored webcam preview: it is there to be
 // read, and backwards writing reads as a fault.
+//
+// Between the two sides of a card it is also the turn-over: mounted with
+// `turnFrom`, it shows the side just taken and turns over, in its place in the
+// frame, to the side asked for next, then stays for that side's scan (user,
+// 2026-11-18: a separate, smaller card turning over a dimmed camera, with the
+// frame gone until it ended, did not read as one movement).
+
+/** How long the side just taken is shown before it turns, and the turn. */
+export const GHOST_TURN_DELAY_MS = 600;
+const GHOST_TURN_MS = 800;
 
 /** When it starts to leave if nothing is framed: long enough to read it, find
  *  the document and bring it up to the camera. */
@@ -69,6 +79,8 @@ export function DocumentGhost({
   accent,
   subject,
   documentFound = false,
+  turnFrom = null,
+  holding = false,
 }: {
   /** Guide aspect (width / height): a card and a passport page differ. */
   aspect: number;
@@ -79,28 +91,46 @@ export function DocumentGhost({
   /** Ends it early, after MIN_GHOST_MS: once a document is framed the guidance
    *  has done its job and would only sit on top of the thing being captured. */
   documentFound?: boolean;
+  /** The side to turn over from, when it opens as the turn-over. Read once, at
+   *  mount: it is the same sample before and after the turn. */
+  turnFrom?: 'front' | 'back' | null;
+  /** Stays, and its timing does not start, while true: the turn-over is still
+   *  on screen and nothing is being scanned yet. */
+  holding?: boolean;
 }) {
   const hostRef = useRef<HTMLDivElement | null>(null);
   const shownAt = useRef(Date.now());
   const [guide, setGuide] = useState<GuideRect | null>(null);
   const [arrived, setArrived] = useState(false);
   const [leaving, setLeaving] = useState(false);
+  const [from] = useState(turnFrom);
+  const [turned, setTurned] = useState(false);
 
   useEffect(() => {
     const frame = requestAnimationFrame(() => setArrived(true));
-    const hold = setTimeout(() => setLeaving(true), DOCUMENT_GHOST_MS);
-    return () => {
-      cancelAnimationFrame(frame);
-      clearTimeout(hold);
-    };
+    return () => cancelAnimationFrame(frame);
   }, []);
 
   useEffect(() => {
-    if (!documentFound) return undefined;
+    if (!from) return undefined;
+    const turn = setTimeout(() => setTurned(true), GHOST_TURN_DELAY_MS);
+    return () => clearTimeout(turn);
+  }, [from]);
+
+  // Its time on screen counts from when the scan it guides starts.
+  useEffect(() => {
+    if (holding) return undefined;
+    shownAt.current = Date.now();
+    const hold = setTimeout(() => setLeaving(true), DOCUMENT_GHOST_MS);
+    return () => clearTimeout(hold);
+  }, [holding]);
+
+  useEffect(() => {
+    if (!documentFound || holding) return undefined;
     const wait = Math.max(0, MIN_GHOST_MS - (Date.now() - shownAt.current));
     const early = setTimeout(() => setLeaving(true), wait);
     return () => clearTimeout(early);
-  }, [documentFound]);
+  }, [documentFound, holding]);
 
   // Measured on resize as well: the guide is derived from the viewport, so a
   // rotation would otherwise leave the sample on the old rectangle.
@@ -117,22 +147,43 @@ export function DocumentGhost({
     return () => observer?.disconnect();
   }, [aspect, band]);
 
+  const place = guide && {
+    left: guide.x,
+    top: guide.y,
+    width: guide.width,
+    height: guide.height,
+    opacity: arrived && !leaving ? GHOST_OPACITY : 0,
+    transition: `opacity ${leaving ? FADE_OUT_MS : FADE_IN_MS}ms ease-in-out`,
+  };
+  // One face of the turning card: the back of each is hidden, so only the face
+  // towards the camera shows, as with a real card.
+  const face = (rotate: number) => ({
+    transform: `rotateY(${rotate}deg)`,
+    backfaceVisibility: 'hidden' as const,
+    WebkitBackfaceVisibility: 'hidden' as const,
+    transition: `transform ${GHOST_TURN_MS}ms cubic-bezier(0.65, 0, 0.35, 1)`,
+  });
+
   return (
     <div ref={hostRef} aria-hidden="true" className="pointer-events-none absolute inset-0">
-      {guide && (
-        <img
-          src={specimenSource(subject, subject.side, aspect, accent)}
-          alt=""
-          className="absolute"
-          style={{
-            left: guide.x,
-            top: guide.y,
-            width: guide.width,
-            height: guide.height,
-            opacity: arrived && !leaving ? GHOST_OPACITY : 0,
-            transition: `opacity ${leaving ? FADE_OUT_MS : FADE_IN_MS}ms ease-in-out`,
-          }}
-        />
+      {place && !from && (
+        <img src={specimenSource(subject, subject.side, aspect, accent)} alt="" className="absolute" style={place} />
+      )}
+      {place && from && (
+        <div className="absolute" style={{ ...place, perspective: '900px' }} data-ghost-turn={turned ? 'turned' : 'from'}>
+          <img
+            src={specimenSource(subject, from, aspect, accent)}
+            alt=""
+            className="absolute inset-0 h-full w-full motion-reduce:transition-none"
+            style={face(turned ? 180 : 0)}
+          />
+          <img
+            src={specimenSource(subject, subject.side, aspect, accent)}
+            alt=""
+            className="absolute inset-0 h-full w-full motion-reduce:transition-none"
+            style={face(turned ? 0 : -180)}
+          />
+        </div>
       )}
     </div>
   );

@@ -87,31 +87,17 @@ export function Reassurance({ visible = true }: { visible?: boolean }) {
 
 /** How far through the gestures the person is, under the window: what the row
  *  of dots says in the modal, in words. */
-export function StepCount({ step, total }: { step: number; total: number }) {
+export function StepCount({ step, total, visuallyHidden = false }: { step: number; total: number; visuallyHidden?: boolean }) {
   const t = useText();
+  // With head directions the line round the window already shows how far
+  // along the check is, so the count is for screen readers only (the line is
+  // a picture to them) (user, 2026-11-18).
+  if (visuallyHidden) return <p className="sr-only">{t('presence.camera.stepCount', { step, total })}</p>;
   return (
     <div className="flex justify-center">
       <Pill className="text-xs font-semibold tabular-nums text-foreground">
         {t('presence.camera.stepCount', { step, total })}
       </Pill>
-    </div>
-  );
-}
-
-/**
- * The plate the gesture animation sits on over the camera: a solid white disc
- * with a ring and a shadow, so the cartoon reads against any room. `compact`
- * is the one inside the instruction's pill on a short phone.
- */
-export function GesturePlate({ children, compact = false }: { children: React.ReactNode; compact?: boolean }) {
-  return (
-    <div
-      className={cn(
-        'shrink-0 overflow-hidden rounded-full border-primary bg-white',
-        compact ? 'border-[1.5px] p-0.5' : 'border-2 p-1 shadow-[0_4px_16px_rgba(0,0,0,0.25)]',
-      )}
-    >
-      {children}
     </div>
   );
 }

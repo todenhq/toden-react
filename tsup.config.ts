@@ -32,7 +32,7 @@ export default defineConfig({
     // stylesheet import. `.txt`, NOT `.css`: tsup's own CSS pipeline
     // intercepts `.css` imports ahead of this loader map and emits an empty
     // module (`var styles_default = {}`), silently unstyling the shadow roots.
-    options.loader = { ...options.loader, '.gif': 'dataurl', '.webp': 'dataurl', '.txt': 'text' };
+    options.loader = { ...options.loader, '.txt': 'text' };
   },
   // dist/styles.css is a copy of the pre-built sheet, refreshed per build.
   // `clean: true` wipes dist/ on each (re)build, so if the CSS isn't tied to

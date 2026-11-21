@@ -1,5 +1,5 @@
 import type { VerificationState } from '../context/types';
-import { getStepLog } from './step-log';
+import { getStepLog, type StepLog } from './step-log';
 import { multiIdWireSlots } from './multi-id';
 
 /**
@@ -20,7 +20,7 @@ export interface SessionProgressPayload {
    * dashboard timeline fills in live rather than appearing all at once at the
    * end — which is no use at all while somebody is stuck.
    */
-  stepLog?: { steps: { step: string; at: string }[]; sentAt: string } | null;
+  stepLog?: StepLog | null;
   mediaIds?: Record<string, string>;
   data?: {
     selectedCountry?: unknown;

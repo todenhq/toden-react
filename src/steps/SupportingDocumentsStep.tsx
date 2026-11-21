@@ -21,6 +21,7 @@ import { GroupEdge, TuckedRow } from './business-documents/GroupRow';
 import { PhotoCamera } from '../components/PhotoCamera';
 import { usePhotoCamera } from '../hooks/usePhotoCamera';
 import { PHOTO_COPY, photoFileName } from '../lib/photo-mode';
+import { journeyUpload } from '../lib/journey';
 
 /**
  * Supporting-documents step: one upload slot per requested document.
@@ -78,7 +79,7 @@ export function SupportingDocumentsStep() {
     }
     setUploadingKey(key);
     try {
-      const mediaId = await config.api.upload(file, 'supporting_document');
+      const mediaId = await journeyUpload('supporting_document', () => config.api.upload(file, 'supporting_document'));
       setFiles((prev) => ({ ...prev, [key]: file }));
       dispatch({
         type: 'SET_SUPPORTING_DOCUMENTS',

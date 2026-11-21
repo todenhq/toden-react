@@ -613,11 +613,20 @@ export interface VoiceGuidanceConfig {
   enabled?: boolean;
   /**
    * BCP-47 language tag for the spoken voice (e.g. `'en-US'`, `'fr-FR'`).
-   * Defaults to `'en-US'`. Currently selects the TTS voice only; the spoken
-   * text still mirrors the on-screen English instruction (localized strings
-   * are a planned follow-up).
+   * Defaults to `'en-US'`. Selects the device voice, and the language of the
+   * Toden voice clips by its primary subtag (`'en-US'` plays the `en` clips).
+   * The spoken text mirrors the on-screen instruction.
    */
   language?: string;
+  /**
+   * A Toden voice id (e.g. `'lyra'`), usually picked per workflow in the
+   * builder. When set, the prompts play Toden's recorded clips of that voice,
+   * fetched from the KYC server when the liveness step opens. The device voice
+   * still speaks a prompt with no clip (a reworded one, a language without
+   * clips, an unknown voice, or a clip that has not loaded). Omitted: the
+   * device voice only, as before.
+   */
+  voice?: string;
 }
 
 /**
@@ -822,8 +831,10 @@ export interface VerificationConfig<C extends AnyCountry = AnyCountry> {
   /**
    * Spoken liveness instructions (accessibility). `true`/omitted = on,
    * `false` = off, or a {@link VoiceGuidanceConfig} for finer control
-   * (e.g. `{ enabled: true, language: 'fr-FR' }`). TTS output only — no
-   * microphone is used. Default: on.
+   * (e.g. `{ enabled: true, language: 'fr-FR' }` or `{ voice: 'lyra' }`).
+   * TTS output only — no microphone is used. Default: on. Overrides the
+   * workflow's setting key by key: `{ voice: 'rory' }` keeps the workflow's
+   * `enabled` and `language`, and a bare boolean sets `enabled` only.
    */
   voiceGuidance?: VoiceGuidanceOption;
 
@@ -855,6 +866,30 @@ export interface VerificationConfig<C extends AnyCountry = AnyCountry> {
    * turns it off. Usually configured in the workflow builder.
    */
   livenessBrightScreen?: boolean;
+  /**
+   * Gesture guide: on the liveness camera, a face icon pops up in the window,
+   * acts out the gesture being asked for once, then goes, coming back only if
+   * the person stops responding. The instruction is shown in words either
+   * way. On by default; only `false` turns it off. Usually configured in the
+   * workflow builder.
+   */
+  livenessGestureGuide?: boolean;
+  /**
+   * Which gestures the liveness camera asks for (3D Active Motion and Dual
+   * Check). `directions`: head turns and looks up or down, as many as
+   * `livenessDirectionCount` (3 unless set), always with a turn, in an order
+   * picked for the session. `classic`: two or three of nod,
+   * turn, blink and smile. Unset is `classic`. Usually configured in the
+   * workflow builder, where new workflows start on `directions`.
+   */
+  livenessGestureSet?: 'directions' | 'classic';
+  /**
+   * How many head directions the liveness camera asks for with
+   * `livenessGestureSet: 'directions'`: 2, 3 or 4. Unset is 3. Every run
+   * includes at least one head turn, left or right; the rest are picked at
+   * random, in a random order. Usually configured in the workflow builder.
+   */
+  livenessDirectionCount?: number;
   /** Show the captured selfie, with Retake and Continue, before moving on.
    *  Off unless `true`; the liveness capture otherwise hands straight over. */
   selfieReview?: boolean;
@@ -1097,16 +1132,13 @@ export interface VerificationConfig<C extends AnyCountry = AnyCountry> {
   nfc?: NfcConfig;
 
   /**
-   * Base path (or absolute URL) where the SDK's gesture GIF assets are served
-   * from. These are used by the liveness step to animate each challenge gesture.
+   * Base path (or absolute URL) of your own copy of the liveness step's face
+   * tracking files. When set, they are tried at `<assetsBasePath>/face-mesh/`
+   * first, before the Toden server and the public CDN
+   * (liveness/face-mesh-sources.ts). Unset by default.
    *
-   * - Set to an **absolute URL** (e.g. `'https://cdn.example.com/kyc-assets'`)
-   *   to serve from a CDN — requires no files in your `public/` folder.
-   * - Set to a **relative path** (e.g. `'/kyc-assets'`) to serve locally; copy
-   *   the `gifs/` folder from `node_modules/@toden/react/gifs/` to
-   *   that path in your public directory.
-   *
-   * Defaults to `'/kyc-assets'`.
+   * It no longer serves gesture pictures: a liveness gesture is asked for in
+   * words and nothing demonstrates it.
    */
   assetsBasePath?: string;
 

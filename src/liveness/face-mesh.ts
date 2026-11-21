@@ -3,6 +3,7 @@
 // The ~10 MB of WASM and model files are NOT bundled: they are fetched, from
 // the list of sources in face-mesh-sources.ts (the KYC server first, the
 // public CDN as the fallback), and a source that fails is skipped for the next.
+// A slow source is not a failed one: see face-mesh-start.ts.
 // ---------------------------------------------------------------------------
 
 import type { NormalizedLandmark } from './types';
@@ -12,6 +13,7 @@ import {
   type FaceMeshInstance,
   type FaceMeshResults,
 } from './face-mesh-script';
+import { startModel } from './face-mesh-start';
 
 // ---------------------------------------------------------------------------
 // Where to load from. Set by `primeFaceMesh` at SDK mount, which is the one
@@ -28,9 +30,6 @@ let origin: FaceMeshOrigin = {};
 export function setFaceMeshOrigin(from: FaceMeshOrigin): void {
   origin = from;
 }
-
-/** How long one source has to download and start the model. */
-const INIT_TIMEOUT_MS = 25_000;
 
 // ---------------------------------------------------------------------------
 // Persistent warm instance — created once (at SDK load time via
@@ -97,7 +96,8 @@ function ensureInstance(): Promise<FaceMeshInstance> {
     const sources = faceMeshSources(origin);
     let lastError: unknown = new Error('No Face Mesh source');
     // One source at a time, each to completion: the script, then the model it
-    // fetches from the same place. Whatever goes wrong, the next one is tried.
+    // fetches from the same place. A source that fails is left for the next;
+    // one that is only slow is waited for (face-mesh-start.ts).
     for (const base of sources) {
       let instance: FaceMeshInstance | null = null;
       try {
@@ -117,12 +117,7 @@ function ensureInstance(): Promise<FaceMeshInstance> {
           }
         });
 
-        await Promise.race([
-          instance.initialize(),
-          new Promise<never>((_, reject) =>
-            setTimeout(() => reject(new Error(`Face Mesh did not start from ${base}`)), INIT_TIMEOUT_MS),
-          ),
-        ]);
+        await startModel(instance, base);
         sharedInstance = instance;
         return instance;
       } catch (err) {

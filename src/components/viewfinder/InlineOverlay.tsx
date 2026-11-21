@@ -73,6 +73,7 @@ export function InlineOverlay({
   documentLabel,
   specimen,
   showSpecimen,
+  turning = false,
   country,
   guideAspect,
   framing,
@@ -91,8 +92,9 @@ export function InlineOverlay({
   documentLabel: string;
   /** The ID being captured, for the sample document. */
   specimen: DocumentSpecimenSubject;
-  /** Off once the turn-over prompt has already shown this side. */
   showSpecimen: boolean;
+  /** Between the sides: the sample turns over in the frame (DocumentGhost). */
+  turning?: boolean;
   country?: string | null;
   guideAspect: number;
   framing: DocumentFraming;
@@ -143,6 +145,8 @@ export function InlineOverlay({
           accent={primaryColor}
           subject={specimen}
           documentFound={framing !== 'none' && framing !== 'wrongShape'}
+          turnFrom={turning ? 'front' : null}
+          holding={turning}
         />
       )}
 

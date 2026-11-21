@@ -4,6 +4,7 @@
 
 import {
   CHALLENGE_POOL,
+  DIRECTION_POOL,
   FLASH_CHALLENGE,
   HOLD_CHALLENGE,
   type ChallengeConfig,
@@ -40,6 +41,48 @@ function shuffle<T>(arr: T[]): T[] {
   return copy;
 }
 
+/** A run asks for this many directions unless the workflow says otherwise. */
+export const DEFAULT_DIRECTION_COUNT = 3;
+
+/**
+ * PURE given `random`. The directions of a run, `count` of the four (2 to 4,
+ * anything else is 3), always with at least one head turn, left or right
+ * (user, 2026-11-18). A turn is what tells a head from a flat picture: Core's
+ * docbio/head-movement.ts only calls a capture flat when a turn was asked for,
+ * and a photo can be tilted up and down but not turned. The rest are picked at
+ * random from the other three, so which directions and their order are what a
+ * recording made earlier cannot know. Returned in the pool's order; the caller
+ * shuffles.
+ */
+export function pickDirections(count: number = DEFAULT_DIRECTION_COUNT, random: () => number = Math.random): ChallengeConfig[] {
+  const n = Number.isInteger(count) && count >= 2 && count <= DIRECTION_POOL.length ? count : DEFAULT_DIRECTION_COUNT;
+  const turns = DIRECTION_POOL.filter((c) => c.type === 'turnLeft' || c.type === 'turnRight');
+  const turn = turns[Math.floor(random() * turns.length) % turns.length]!;
+  const rest = DIRECTION_POOL.filter((c) => c !== turn);
+  // A partial Fisher-Yates with the same random source: n - 1 of the other three.
+  for (let i = 0; i < n - 1; i++) {
+    const j = i + Math.floor(random() * (rest.length - i)) % (rest.length - i);
+    [rest[i], rest[j]] = [rest[j]!, rest[i]!];
+  }
+  const chosen = new Set([turn, ...rest.slice(0, n - 1)]);
+  return DIRECTION_POOL.filter((c) => chosen.has(c));
+}
+
+/**
+ * The challenges for a plan Core picked (liveness/direction-plan.ts): its
+ * gestures (head directions or classic) in its order, with the flash after
+ * them in Dual Check.
+ */
+export function planChallenges(prompts: readonly string[], config: Partial<LivenessConfig> = {}): ChallengeConfig[] {
+  const merged = { ...DEFAULT_LIVENESS_CONFIG, ...config };
+  const planned = prompts
+    .map((type) => DIRECTION_POOL.find((c) => c.type === type) ?? CHALLENGE_POOL.find((c) => c.type === type))
+    .filter((c): c is ChallengeConfig => !!c)
+    .map((c) => ({ ...c, timeoutSeconds: merged.timeoutPerChallenge }));
+  if (merged.mode === 'both') planned.push({ ...FLASH_CHALLENGE });
+  return planned;
+}
+
 export function pickChallenges(config: Partial<LivenessConfig> = {}): ChallengeConfig[] {
   const merged = { ...DEFAULT_LIVENESS_CONFIG, ...config };
 
@@ -47,6 +90,15 @@ export function pickChallenges(config: Partial<LivenessConfig> = {}): ChallengeC
   if (merged.mode === 'flash') return [{ ...FLASH_CHALLENGE }];
   // Passive: no gestures and no flash — hold still while the clip records.
   if (merged.mode === 'passive') return [{ ...HOLD_CHALLENGE }];
+
+  // Head directions: as many as the workflow asks for, 2 to 4, 3 unless set
+  // (user, 2026-11-18), in a shuffled order. Core picks them (useLiveness asks
+  // for a plan); this pick stands in only when no plan comes.
+  if (merged.gestureSet === 'directions') {
+    const directions = shuffle(pickDirections(merged.directionCount)).map((c) => ({ ...c, timeoutSeconds: merged.timeoutPerChallenge }));
+    if (merged.mode === 'both') directions.push({ ...FLASH_CHALLENGE });
+    return directions;
+  }
 
   // Filter pool if a subset is specified
   let pool = CHALLENGE_POOL;

@@ -9,6 +9,7 @@ import { withGroupUpload, type BusinessDocumentGroup } from '../../lib/business-
 import type { BusinessDocumentKey } from '../../types/business';
 import { BUSINESS_DOC_ACCEPTED_MIMES } from '../BusinessDocumentSlot';
 import { readsDocumentPeople } from '../../lib/document-people';
+import { journeyUpload } from '../../lib/journey';
 
 /**
  * Uploading and removing a group's document. Each file uploads at once (type
@@ -42,7 +43,7 @@ export function useGroupUpload() {
     }
     setUploading(group.key);
     try {
-      const mediaId = await config.api.upload(file, 'business_document');
+      const mediaId = await journeyUpload('business_document', () => config.api.upload(file, 'business_document'));
       setFiles((prev) => ({ ...prev, [group.key]: file }));
       const type: BusinessDocumentKey = group.types[0]!.key;
       dispatch({

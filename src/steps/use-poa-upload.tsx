@@ -9,6 +9,7 @@ import { usePhotoCamera } from '../hooks/usePhotoCamera';
 import { PHOTO_COPY, photoFileName } from '../lib/photo-mode';
 import { isPdfMime, uploadSizeError } from '../lib/upload-limits';
 import type { PoaDocumentType } from '../types/config';
+import { journeyUpload } from '../lib/journey';
 
 const ACCEPTED_MIMES = ['image/jpeg', 'image/png', 'image/webp', 'application/pdf'];
 
@@ -41,7 +42,7 @@ export function usePoaUpload(kind: PoaDocumentType) {
     }
     setUploading(true);
     try {
-      const mediaId = await config.api.upload(file, 'proof_of_address');
+      const mediaId = await journeyUpload('proof_of_address', () => config.api.upload(file, 'proof_of_address'));
       setPickedFile(file);
       dispatch({ type: 'SET_MEDIA_ID', payload: { mediaType: 'proofOfAddress', mediaId } });
       dispatch({ type: 'SET_POA_DOCUMENT', payload: { documentType: kind, fileName: file.name } });

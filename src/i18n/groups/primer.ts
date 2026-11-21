@@ -9,19 +9,36 @@ export const PRIMER_TEXTS: TextGroup = {
   title: 'Before you start',
   entries: [
     // Document capture: shown once before the document camera opens.
-    { key: 'primer.document.title', label: 'Document: title', default: "You're about to scan your ID" },
+    // {document} is the name of the document the person chose: "International
+    // Passport", "National ID Card" and so on.
+    {
+      key: 'primer.document.title',
+      label: 'Document: title',
+      default: "You're about to scan your {document}",
+      placeholders: ['document'],
+    },
     {
       key: 'primer.document.body',
       label: 'Document: description',
-      default: "We'll photograph your document and read it automatically. Nothing is shared until you submit.",
+      default: "We'll read the details for you. Nothing is shared until you submit.",
+      placeholders: ['document'],
       multiline: true,
     },
-    { key: 'primer.document.checklist1', label: 'Document: checklist 1', default: 'Have your physical document with you' },
+    {
+      key: 'primer.document.checklist1',
+      label: 'Document: checklist 1',
+      default: 'Have your {document} with you',
+      placeholders: ['document'],
+    },
     { key: 'primer.document.checklist2', label: 'Document: checklist 2', default: 'Find even lighting, avoid glare' },
-    { key: 'primer.document.checklist3', label: 'Document: checklist 3', default: 'Takes about a minute' },
+    { key: 'primer.document.checklist3', label: 'Document: checklist 3', default: 'Takes a few seconds' },
 
     // Selfie capture: shown once before the liveness camera opens.
     { key: 'primer.selfie.title', label: 'Selfie: title', default: "Let's confirm you're really here" },
+    // The web SDK shows these two only where a workflow has written its own:
+    // the picture above the title already shows what is about to happen
+    // (components/ready-primer-content.ts). The mobile SDKs, which have no
+    // such picture, still show the default.
     {
       key: 'primer.selfie.body',
       label: 'Selfie: description',

@@ -82,3 +82,15 @@ describe('every workflow key survives the Verification provider mount', () => {
     for (const key of HOSTED_CHROME) expect(source).toContain(`${key}={`);
   });
 });
+
+describe('the Toden voice loads with the flow, not at the liveness step', () => {
+  // A slow connection had the first prompt in the device voice and the rest in
+  // the Toden voice (2026-11-20): the clips only started loading when the
+  // liveness step opened. Every entry point (the component, the hook, a hosted
+  // link) builds its API client in the config provider, so that is where the
+  // load is started.
+  it('the config provider hands the server to the speech module when its API client is built', () => {
+    const source = read('context/VerificationConfigContext.tsx');
+    expect(source).toMatch(/prepareVoiceClips\(api\.voiceAssetsUrl\)/);
+  });
+});

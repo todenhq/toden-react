@@ -2,7 +2,7 @@ import type { TextEntry } from '../types';
 
 /** A check that failed, the selfie review, and the upload behind it. */
 export const PRESENCE_OUTCOME_ENTRIES: TextEntry[] = [
-  { key: 'presence.failed.timeout', label: 'Error: time ran out', default: "Time's up. Let's try again." },
+  { key: 'presence.failed.timeout', label: 'Error: time ran out', default: "Time's up. Please try again." },
   { key: 'presence.failed.faceLost', label: 'Error: face lost', default: 'Face lost. Please try again.' },
   {
     key: 'presence.failed.loadError',

@@ -34,4 +34,4 @@ export function flashOutcome(
 }
 
 /** Shown while the unmeasurable flash is retried. */
-export const FLASH_RETRY_GUIDANCE = 'Kindly move away from bright light and hold still';
+export const FLASH_RETRY_GUIDANCE = 'Move away from bright light and hold still';

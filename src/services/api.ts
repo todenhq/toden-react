@@ -1,10 +1,12 @@
 import type { SavedAddress } from '../lib/address-book';
 import { SDK_VERSION } from '../utils/device-metadata';
 import { uploadDeviceIdHeader } from '../lib/upload-device-id';
+import { recordNetworkFailure } from '../lib/journey';
 import { appendUploadSession } from '../lib/upload-session';
 import { compactDrawing, type SignatureDrawing } from '../lib/signature';
 import { businessSearchQuery, type BusinessSearchParams } from '../lib/business-search';
 import { livenessFailedResult, type LivenessFailedResult } from '../lib/liveness-attempts';
+import { parseDirectionPlan, type DirectionPlan, type PlanRequest } from '../liveness/direction-plan';
 
 export class VerificationApiError extends Error {
   constructor(
@@ -498,6 +500,13 @@ export interface WorkflowConfigPayload {
   maxLivenessAttempts?: number | false;
   /** Light theme while the liveness camera is on. On unless `false`. */
   livenessBrightScreen?: boolean;
+  /** A face icon acts out each liveness gesture. On unless `false`. */
+  livenessGestureGuide?: boolean;
+  /** Which liveness gestures are asked for. Unset is `classic`. */
+  livenessGestureSet?: 'directions' | 'classic';
+  /** How many head directions a run asks for with `directions`: 2 to 4, unset
+   *  is 3. Every run includes a head turn, left or right. */
+  livenessDirectionCount?: number;
   /** Show the captured selfie, with Retake and Continue, before moving on.
    *  Off unless `true`; the liveness capture otherwise hands straight over. */
   selfieReview?: boolean;
@@ -654,6 +663,13 @@ export interface HandoffSessionSnapshot {
   maxLivenessAttempts?: number | false;
   /** Light theme while the liveness camera is on. On unless `false`. */
   livenessBrightScreen?: boolean;
+  /** A face icon acts out each liveness gesture. On unless `false`. */
+  livenessGestureGuide?: boolean;
+  /** Which liveness gestures are asked for. Unset is `classic`. */
+  livenessGestureSet?: 'directions' | 'classic';
+  /** How many head directions a run asks for with `directions`: 2 to 4, unset
+   *  is 3. Every run includes a head turn, left or right. */
+  livenessDirectionCount?: number;
   /** Show the captured selfie, with Retake and Continue, before moving on.
    *  Off unless `true`; the liveness capture otherwise hands straight over. */
   selfieReview?: boolean;
@@ -945,6 +961,21 @@ function toUploadFile(file: Blob, type: MediaUploadType): File {
 // Factory
 // ---------------------------------------------------------------------------
 
+/** Browsers refuse a keepalive request whose body is 64 KB or more; a margin under it. */
+const KEEPALIVE_MAX_BYTES = 60 * 1024;
+
+/**
+ * fetch, recording on the journey a request that never reached the server
+ * (offline, DNS, a timeout) before rethrowing it (lib/journey.ts). An HTTP
+ * error answer resolves and is not recorded here.
+ */
+function reach(url: string, init: RequestInit): Promise<Response> {
+  return fetch(url, init).catch((err: unknown) => {
+    recordNetworkFailure(err);
+    throw err;
+  });
+}
+
 export function createVerificationApi(baseUrl: string, apiKey: string) {
   const base = `${baseUrl}/api/v1`;
   const headers = baseHeaders(apiKey);
@@ -953,7 +984,7 @@ export function createVerificationApi(baseUrl: string, apiKey: string) {
   // Authorization + X-SDK-Version headers and a JSON content type when a body
   // is present.
   async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
-    const res = await fetch(`${base}${path}`, {
+    const res = await reach(`${base}${path}`, {
       ...init,
       headers: {
         ...headers,
@@ -965,6 +996,13 @@ export function createVerificationApi(baseUrl: string, apiKey: string) {
   }
 
   return {
+    /**
+     * Where the Toden voice clips for the spoken liveness prompts are served
+     * (`{voiceAssetsUrl}/manifest.json`, then one clip per phrase). Public, no
+     * key; see liveness/voice-clips.ts.
+     */
+    voiceAssetsUrl: `${base}/assets/voices`,
+
     /**
      * Start or resume this user's verification session.
      *
@@ -1098,10 +1136,14 @@ export function createVerificationApi(baseUrl: string, apiKey: string) {
      * Save where the user has got to. Best-effort by contract — losing a save
      * costs the user some re-typing on resume, and must never interrupt them now.
      */
-    async saveProgress(sessionId: string, progress: unknown): Promise<void> {
+    async saveProgress(sessionId: string, progress: unknown, opts: { keepalive?: boolean } = {}): Promise<void> {
+      const body = JSON.stringify(progress);
       await request(`/session/${encodeURIComponent(sessionId)}/progress`, {
         method: 'PUT',
-        body: JSON.stringify(progress),
+        body,
+        // keepalive outlives the page (a closed tab, a phone locking), but
+        // browsers refuse a keepalive body over 64 KB; a bigger one goes as usual.
+        ...(opts.keepalive && body.length < KEEPALIVE_MAX_BYTES ? { keepalive: true } : {}),
       });
     },
 
@@ -1119,7 +1161,7 @@ export function createVerificationApi(baseUrl: string, apiKey: string) {
       // Don't set Content-Type — the browser adds the multipart boundary itself.
       // The per-install id rides every upload (Device Intelligence; omitted
       // when the workflow turns it off or storage holds no id).
-      const res = await fetch(`${base}/upload`, {
+      const res = await reach(`${base}/upload`, {
         method: 'POST',
         headers: { ...headers, ...uploadDeviceIdHeader() },
         body: form,
@@ -1133,7 +1175,7 @@ export function createVerificationApi(baseUrl: string, apiKey: string) {
      * strokes and stores it as a supporting document; returns its mediaId.
      */
     async uploadSignature(drawing: SignatureDrawing): Promise<string> {
-      const res = await fetch(`${base}/upload/signature`, {
+      const res = await reach(`${base}/upload/signature`, {
         method: 'POST',
         headers: { ...headers, 'Content-Type': 'application/json', ...uploadDeviceIdHeader() },
         body: JSON.stringify(compactDrawing(drawing)),
@@ -1227,6 +1269,29 @@ export function createVerificationApi(baseUrl: string, apiKey: string) {
     }): Promise<LivenessFailedResult> {
       const raw = await request<unknown>('/liveness/failed', { method: 'POST', body: JSON.stringify(body) });
       return livenessFailedResult(raw);
+    },
+
+    /**
+     * The head directions Core picked for one liveness attempt, or null when it
+     * could not say (an older Core, or no answer): the SDK then picks its own.
+     * Ask once per attempt; a retry asks again.
+     */
+    /** The gestures Core picked for one liveness attempt: head directions or classic. */
+    async livenessDirections(plan: PlanRequest): Promise<DirectionPlan | null> {
+      try {
+        const raw = await request<unknown>('/liveness/directions', {
+          method: 'POST',
+          body: JSON.stringify({
+            ...(plan.set === 'none' ? {} : { count: plan.count }),
+            set: plan.set,
+            ...(plan.set === 'classic' && plan.pool && plan.pool.length > 0 ? { pool: plan.pool } : {}),
+            ...(plan.flash != null ? { flash: plan.flash } : {}),
+          }),
+        });
+        return parseDirectionPlan(raw, plan);
+      } catch {
+        return null;
+      }
     },
 
     /** Whether the email has a saved address this flow could take. */

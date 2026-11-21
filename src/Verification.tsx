@@ -183,6 +183,9 @@ function VerificationInner({
   flashSequenceLength,
   maxLivenessAttempts,
   livenessBrightScreen,
+  livenessGestureGuide,
+  livenessGestureSet,
+  livenessDirectionCount,
   selfieReview,
   deviceIntelligence,
   voiceGuidance,
@@ -252,6 +255,9 @@ function VerificationInner({
     ...(flashSequenceLength !== undefined ? { flashSequenceLength } : {}),
     ...(maxLivenessAttempts !== undefined ? { maxLivenessAttempts } : {}),
     ...(livenessBrightScreen !== undefined ? { livenessBrightScreen } : {}),
+    ...(livenessGestureGuide !== undefined ? { livenessGestureGuide } : {}),
+    ...(livenessGestureSet !== undefined ? { livenessGestureSet } : {}),
+    ...(livenessDirectionCount !== undefined ? { livenessDirectionCount } : {}),
     ...(selfieReview !== undefined ? { selfieReview } : {}),
     ...(deviceIntelligence !== undefined ? { deviceIntelligence } : {}),
     ...(deviceHandoff !== undefined ? { deviceHandoff } : {}),
@@ -280,7 +286,7 @@ function VerificationInner({
     ...(userData ? { userData } : {}),
     ...(businessPrefill ? { businessPrefill } : {}),
     ...(assetsBasePath ? { assetsBasePath } : {}),
-  }), [country, workflowId, idTypes, countries, idSelectionLayout, multiId, enableSelfie, enableDocumentCapture, allowDocumentUpload, allowDocumentScan, documentReview, documentAudio, livenessAudio, enableLiveness, livenessMode, flashSequenceLength, maxLivenessAttempts, livenessBrightScreen, selfieReview, deviceIntelligence, deviceHandoff, consentStep, silentCapture, biometric, requireMobileDevice, voiceGuidance, showThemeToggle, progressStyle, fullScreen, disableClose, appearance, consent, success, texts, emailVerification, phoneVerification, questionnaire, proofOfAddress, supportingDocuments, addressCollection, nfc, metadata, userId, userData, businessPrefill, assetsBasePath]);
+  }), [country, workflowId, idTypes, countries, idSelectionLayout, multiId, enableSelfie, enableDocumentCapture, allowDocumentUpload, allowDocumentScan, documentReview, documentAudio, livenessAudio, enableLiveness, livenessMode, flashSequenceLength, maxLivenessAttempts, livenessBrightScreen, livenessGestureGuide, livenessGestureSet, livenessDirectionCount, selfieReview, deviceIntelligence, deviceHandoff, consentStep, silentCapture, biometric, requireMobileDevice, voiceGuidance, showThemeToggle, progressStyle, fullScreen, disableClose, appearance, consent, success, texts, emailVerification, phoneVerification, questionnaire, proofOfAddress, supportingDocuments, addressCollection, nfc, metadata, userId, userData, businessPrefill, assetsBasePath]);
 
   // Pre-load MediaPipe Face Mesh model as soon as the SDK mounts and apply the
   // voice-guidance config (enabled + language) for the spoken liveness prompts.
@@ -585,6 +591,9 @@ function VerificationInner({
       flashSequenceLength={flashSequenceLength}
       maxLivenessAttempts={maxLivenessAttempts}
       livenessBrightScreen={livenessBrightScreen}
+      livenessGestureGuide={livenessGestureGuide}
+      livenessGestureSet={livenessGestureSet}
+      livenessDirectionCount={livenessDirectionCount}
       selfieReview={selfieReview}
       deviceIntelligence={deviceIntelligence}
       deviceHandoff={deviceHandoff}

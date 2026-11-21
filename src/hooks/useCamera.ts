@@ -1,5 +1,6 @@
 'use client';
 
+import { recordJourneyEvent } from '../lib/step-log';
 import { useRef, useState, useEffect, useCallback } from 'react';
 import { CAPTURE_WIDTH, CAPTURE_HEIGHT, type VideoCaptureConstraints } from '../lib/capture-settings';
 import { inspectCameraStream } from '../lib/integrity-signals';
@@ -98,6 +99,9 @@ export function useCamera({
 
       const message = err instanceof Error ? err.message : 'Camera access failed';
 
+      // On the journey too, for drop-off insights (lib/step-log.ts).
+      recordCameraFailure(err);
+
       if (
         err instanceof DOMException &&
         (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError')
@@ -151,4 +155,21 @@ export function useCamera({
   }, [facingMode, enabled, startCamera]);
 
   return { videoRef, stream, isReady, error, permissionDenied, restart, stop };
+}
+
+/**
+ * PURE in effect: records why the camera did not start. Refused is
+ * `camera_denied`; none found, in use or anything else is `camera_unavailable`.
+ */
+export function recordCameraFailure(err: unknown): void {
+  const name = (err as { name?: unknown } | null)?.name;
+  if (name === 'NotAllowedError' || name === 'PermissionDeniedError') {
+    recordJourneyEvent('camera_denied');
+  } else if (name === 'NotFoundError' || name === 'DevicesNotFoundError' || name === 'OverconstrainedError') {
+    recordJourneyEvent('camera_unavailable', 'not_found');
+  } else if (name === 'NotReadableError' || name === 'TrackStartError' || name === 'AbortError') {
+    recordJourneyEvent('camera_unavailable', 'in_use');
+  } else {
+    recordJourneyEvent('camera_unavailable', 'other');
+  }
 }

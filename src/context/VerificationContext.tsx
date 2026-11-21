@@ -37,6 +37,7 @@ export const initialVerificationState: VerificationState = {
   businessApplication: { keyPeople: [], documents: [], applicantRole: null, applicantName: '', applicantKeyPersonIndex: null, uboUnidentifiable: false },
   supportingDocuments: [],
   selfieImage: null,
+  selfieScene: null,
   selfieUpload: IDLE_SELFIE_UPLOAD,
   addressPhotoPreview: null,
   addressSandboxOutcome: null,
@@ -416,12 +417,13 @@ export function verificationReducer(state: VerificationState, action: Verificati
       return { ...state, addressIntroSeen: true };
 
     case 'SET_SELFIE_IMAGE':
-      return { ...state, selfieImage: action.payload };
+      return { ...state, selfieImage: action.payload, selfieScene: action.scene ?? null };
 
     case 'CLEAR_SELFIE_IMAGE':
       return {
         ...state,
         selfieImage: null,
+        selfieScene: null,
         selfieUpload: IDLE_SELFIE_UPLOAD,
         mediaIds: { ...state.mediaIds, selfie: undefined },
       };
@@ -579,6 +581,7 @@ export function verificationReducer(state: VerificationState, action: Verificati
         livenessVideoBlob: null,
         mediaIds: {},
         selfieImage: null,
+        selfieScene: null,
         selfieUpload: IDLE_SELFIE_UPLOAD,
         addressPhotoPreview: null,
   addressSandboxOutcome: null,

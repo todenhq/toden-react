@@ -6,3 +6,4 @@
 export { detectNod, detectHeadTurn, detectSmile, detectOpenMouth } from './gestures';
 export { detectBlink, createBlinkState, calculateEAR, type BlinkState } from './blink';
 export { checkFacePosition, type FacePosition } from './position';
+export { DIRECTION_HOLD_FRAMES, facing, headTilt, oppositeDirection, type Facing } from './directions';

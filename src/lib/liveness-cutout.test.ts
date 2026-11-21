@@ -1,8 +1,15 @@
 import { describe, expect, it } from 'vitest';
 import {
   CUTOUT_ASPECT,
+  DESKTOP_PICTURE_SHARE,
+  DESKTOP_WINDOW_MARGIN,
+  FACE_WINDOW_MAX_FILL,
+  FACE_WINDOW_MIN_FILL,
+  INSTRUCTION_ROOM,
+  WINDOW_BELOW_KEEP,
   faceWindowFor,
   livenessCutout,
+  windowTop,
   livenessTint,
   surroundPath,
   tintPath,
@@ -33,10 +40,62 @@ describe('livenessCutout', () => {
     expect(w.width).toBeCloseTo((680 * 0.56) / CUTOUT_ASPECT);
     expect(w.width).toBeGreaterThan(280);
     expect(w.height).toBeCloseTo(w.width * CUTOUT_ASPECT);
-    // A tall desktop frame stops at the desktop cap.
-    expect(livenessCutout({ width: 1200, height: 1000 }).width).toBe(330);
+    // The modal as it opens by default is as it was.
+    expect(livenessCutout({ width: 761, height: 628 }).width).toBeCloseTo((628 * 0.56) / CUTOUT_ASPECT);
     // Just under the desktop width, the phone rule still applies.
     expect(livenessCutout({ width: 599, height: 1000 }).width).toBe(280);
+  });
+});
+
+describe('the desktop window on a full screen', () => {
+  // How wide a face is drawn, as a share of the window, for a person whose face
+  // is `share` of a 4:3 webcam's picture.
+  const fill = (frame: { width: number; height: number }, share: number) =>
+    (share * Math.max(frame.width, (frame.height * 4) / 3)) / livenessCutout(frame).width;
+  const screens = {
+    laptop: { width: 1440, height: 900 },
+    desktop: { width: 1920, height: 1080 },
+    reported: { width: 2056, height: 1204 },
+    ultrawide: { width: 3440, height: 1350 },
+  };
+
+  it('grows with the screen instead of stopping at the modal’s size', () => {
+    // The screen it was reported on: the window was 330 wide and the person had to move back.
+    const w = livenessCutout(screens.reported);
+    expect(w.width).toBeCloseTo(2056 * DESKTOP_PICTURE_SHARE);
+    expect(w.width).toBeGreaterThan(600);
+    expect(livenessCutout(screens.laptop).width).toBeGreaterThan(440);
+    expect(livenessCutout(screens.desktop).width).toBeGreaterThan(560);
+  });
+
+  it('never grows past what the screen’s height leaves for the words above and the panel below', () => {
+    for (const frame of Object.values(screens)) {
+      const w = livenessCutout(frame);
+      const top = windowTop(frame, w);
+      expect(w.height).toBeLessThanOrEqual(frame.height - 2 * DESKTOP_WINDOW_MARGIN + 0.01);
+      // The instruction's pill fits over it, under the back button.
+      expect(top - 20 - 60).toBeGreaterThanOrEqual(INSTRUCTION_ROOM);
+      // The retry panel fits under it.
+      expect(frame.height - top - w.height).toBeGreaterThanOrEqual(WINDOW_BELOW_KEEP - 0.01);
+      expect(w.height).toBeCloseTo(w.width * CUTOUT_ASPECT);
+    }
+  });
+
+  it('takes a person sitting at their screen without asking them to move back', () => {
+    // A face about a fifth of a webcam's picture: someone at a laptop.
+    for (const frame of [screens.laptop, screens.desktop, screens.reported]) {
+      expect(fill(frame, 0.2)).toBeLessThan(FACE_WINDOW_MAX_FILL);
+      expect(fill(frame, 0.2)).toBeGreaterThan(FACE_WINDOW_MIN_FILL);
+    }
+    // Under the old 330 cap the same person overflowed the window on every one of them.
+    expect((0.2 * 2056) / 330).toBeGreaterThan(1);
+  });
+
+  it('is the same share of the picture in the modal and on a full screen, where the height allows', () => {
+    const modal = { width: 761, height: 628 };
+    const modalShare = livenessCutout(modal).width / ((628 * 4) / 3);
+    const fullShare = livenessCutout(screens.reported).width / 2056;
+    expect(Math.abs(modalShare - fullShare)).toBeLessThan(0.005);
   });
 });
 
@@ -68,7 +127,7 @@ describe('the paths', () => {
 
 describe('livenessTint', () => {
   it('is thin over a blur, and heavier in a dark room', () => {
-    expect(livenessTint({ dimRoom: false, blurs: true })).toBe(0.16);
+    expect(livenessTint({ dimRoom: false, blurs: true })).toBe(0.08);
     expect(livenessTint({ dimRoom: true, blurs: true })).toBe(0.66);
   });
 
@@ -158,20 +217,6 @@ describe('BlurBudget', () => {
   });
 });
 
-describe('the gesture picture on a short screen', () => {
-  it('is full size with room, shrinks with less, and never disappears into the pill', async () => {
-    const { gestureSize, GESTURE_MIN_SIZE } = await import('./liveness-cutout');
-    expect(gestureSize(220, 76)).toBe(76);
-    expect(gestureSize(150, 76)).toBe(76);
-    expect(gestureSize(120, 76)).toBe(56);
-    expect(gestureSize(90, 76)).toBe(GESTURE_MIN_SIZE);
-    expect(gestureSize(0, 76)).toBe(GESTURE_MIN_SIZE);
-    expect(gestureSize(220, 52)).toBe(GESTURE_MIN_SIZE);
-    expect(gestureSize(170, 96)).toBe(96);
-    expect(gestureSize(140, 96)).toBe(74);
-  });
-});
-
 // The same vectors as the React Native and Flutter SDKs' tests.
 describe('windowDrop', () => {
   it('leaves the window at the centre on a tall phone', async () => {
@@ -209,9 +254,11 @@ describe('windowDrop', () => {
     const face = faceWindowFor({ frame, window, frameAspect: 9 / 16, drop: windowDrop(frame, window) });
     expect(face.centreY).toBeCloseTo(0.5 + 17 / 568.889, 3);
     expect(faceWindowFor({ frame, window, frameAspect: 9 / 16 }).centreY).toBe(0.5);
-    // Too little room for the smallest picture and its words: the block keeps
-    // its height and runs over the window's top edge.
-    expect(aboveHeight(96)).toBe(122);
+    // Nothing but the instruction stands above the window. Too little room
+    // for the words: the block keeps its height and runs over the window's
+    // top edge.
+    expect(aboveHeight(40)).toBe(66);
+    expect(aboveHeight(96)).toBe(96);
     expect(aboveHeight(180)).toBe(180);
   });
 });

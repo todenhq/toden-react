@@ -1,5 +1,6 @@
 'use client';
 
+import { recordJourneyEvent } from '../lib/step-log';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Upload } from './icons';
@@ -168,11 +169,14 @@ function PhotoCameraBody(p: BodyProps) {
   useEffect(() => {
     if (noCameraApi) {
       setDevice('none');
+      recordJourneyEvent('camera_unavailable', 'not_found');
       return undefined;
     }
     let live = true;
     void hasNoWebcam().then((none) => {
-      if (live) setDevice(none ? 'none' : 'present');
+      if (!live) return;
+      setDevice(none ? 'none' : 'present');
+      if (none) recordJourneyEvent('camera_unavailable', 'not_found');
     });
     return () => {
       live = false;

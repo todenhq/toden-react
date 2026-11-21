@@ -2,7 +2,7 @@
 
 import { configScope, unsupportedScopeConfig } from '../lib/scope';
 import { hasSupportingDocumentsStep, verifiedIdsFor } from '../lib/supporting-documents';
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { buildThemeVars, resolveOverlayColor } from '../lib/theme';
 import { applyConfiguredTheme } from '../lib/apply-theme';
 import { ThemeVarsContext } from '../lib/theme-context';
@@ -74,6 +74,9 @@ import { SubmittedStep } from '../steps/SubmittedStep';
 import { CompletedStep } from '../steps/CompletedStep';
 import { ModalSurfaceContext } from '../lib/modal-surface';
 import { countryOnIdStep } from '../lib/id-selection-layout';
+import { startClickLog } from '../lib/click-log';
+import { startJourneyLifecycle, webJourneyClient } from '../lib/journey';
+import { recordJourneyEvent, setJourneyClient } from '../lib/step-log';
 
 interface VerificationModalProps {
   open: boolean;
@@ -222,6 +225,20 @@ export function VerificationModal({ open, onClose, showThemeToggle, disableClose
   const { state, dispatch } = useVerificationContext();
   const config = useVerificationConfig();
   const t = useText();
+  // Button presses for the verification timeline; named by catalogue key only (lib/click-log.ts).
+  useEffect(() => (open ? startClickLog(t) : undefined), [open, t]);
+  // Drop-off insights (lib/journey.ts): the SDK and device on every collected
+  // log, and the page hidden, closed or back online while the flow is open.
+  useEffect(() => {
+    if (!open) return undefined;
+    setJourneyClient(webJourneyClient());
+    return startJourneyLifecycle();
+  }, [open]);
+  // The applicant pressing Close, before the flow is finished.
+  const closeByApplicant = useCallback(() => {
+    if (state.currentStep !== 'submitted') recordJourneyEvent('flow_closed');
+    onClose();
+  }, [onClose, state.currentStep]);
 
   // Multi-ID flows: the applicant picks each slot's ID from what the admin
   // allowed, minus what earlier slots used, minus any pick that would strand a
@@ -301,6 +318,11 @@ export function VerificationModal({ open, onClose, showThemeToggle, disableClose
   const declined = configError || cancelled ? null : state.sessionDeclined;
   useReportDecline(declined, config.onError, (d) => sessionDeclinedCopy(d, (key) => t(key)).description);
   const blocked = configError !== null || cancelled !== null || declined !== null;
+  // An error screen the applicant saw, by code (drop-off insights).
+  const shownError = configError ? 'config_error' : cancelled ? 'session_cancelled' : declined ? 'session_declined' : state.error?.code ?? null;
+  useEffect(() => {
+    if (open && shownError) recordJourneyEvent('error_shown', shownError);
+  }, [open, shownError]);
 
   // Apply the configured initial light/dark mode — 'system' follows (and
   // tracks) the device preference. Runs on mount (and if the prop changes);
@@ -431,13 +453,13 @@ export function VerificationModal({ open, onClose, showThemeToggle, disableClose
     <BackAvailableContext.Provider value={backAvailable}>
     <CaptureLightContext.Provider value={setLightOverride}>
     <ImmersiveCaptureContext.Provider value={setImmersive}>
-    <ImmersiveCloseContext.Provider value={dismissBlocked ? null : onClose}>
+    <ImmersiveCloseContext.Provider value={dismissBlocked ? null : closeByApplicant}>
     <LivenessCameraContext.Provider value={reportCameraShown}>
     {/* The builder preview is one pane of a larger page. A modal dialog traps
         focus and takes it on mount, which pulled the caret out of whichever
         builder field the author was typing in. Real flows keep both. */}
     <ModalSurfaceContext.Provider value={surface}>
-    <Dialog modal={!config.previewMode} open={open} onOpenChange={(isOpen) => { if (!isOpen && !dismissBlocked) onClose(); }}>
+    <Dialog modal={!config.previewMode} open={open} onOpenChange={(isOpen) => { if (!isOpen && !dismissBlocked) closeByApplicant(); }}>
       <DialogContent
         ref={setSurface}
         onOpenAutoFocus={(event) => { if (config.previewMode) event.preventDefault(); }}
@@ -475,7 +497,7 @@ export function VerificationModal({ open, onClose, showThemeToggle, disableClose
             // switched back to dark mid-step.
             showThemeToggle={forceLight ? false : showThemeToggle}
             dismissBlocked={dismissBlocked}
-            onClose={onClose}
+            onClose={closeByApplicant}
             fullScreen={fullScreen}
             fullscreen={fullscreen}
             onToggleExpand={() => setExpanded((f) => !f)}
@@ -500,13 +522,13 @@ export function VerificationModal({ open, onClose, showThemeToggle, disableClose
               !immersive && fullscreen && 'xl:mx-auto xl:w-full xl:max-w-2xl',
             )} key={configError ? 'config-error' : cancelled ? 'session-cancelled' : declined ? 'session-declined' : state.currentStep}>
               {configError ? (
-                <ConfigErrorScreen message={configError} onClose={onClose} />
+                <ConfigErrorScreen message={configError} onClose={closeByApplicant} />
               ) : cancelled ? (
                 // A full-page hosted link cannot close (disableClose): the
                 // final screen then offers no Close that would do nothing.
-                <SessionCancelledScreen message={cancelled.message} onClose={disableClose ? undefined : onClose} />
+                <SessionCancelledScreen message={cancelled.message} onClose={disableClose ? undefined : closeByApplicant} />
               ) : declined ? (
-                <SessionDeclinedScreen declined={declined} onClose={disableClose ? undefined : onClose} />
+                <SessionDeclinedScreen declined={declined} onClose={disableClose ? undefined : closeByApplicant} />
               ) : (
                 <>
                   {/* Not over the full-screen selfie camera: it has no

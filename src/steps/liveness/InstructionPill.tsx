@@ -50,7 +50,7 @@ const UNMEASURED_ROOM = 4096;
 
 const REDUCED_MOTION = '(prefers-reduced-motion: reduce)';
 
-function usePrefersReducedMotion(): boolean {
+export function usePrefersReducedMotion(): boolean {
   const [reduced, setReduced] = useState(
     () => typeof window !== 'undefined' && !!window.matchMedia?.(REDUCED_MOTION).matches,
   );

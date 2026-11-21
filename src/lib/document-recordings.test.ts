@@ -91,6 +91,48 @@ describe('a side submits only its own recording', () => {
   });
 });
 
+describe('the camera from the front to the back', () => {
+  const src = readFileSync(new URL('../steps/DocumentCaptureStep.tsx', import.meta.url).pathname, 'utf8');
+  const between = (from: string, to: string) => src.slice(src.indexOf(from), src.indexOf(to, src.indexOf(from)));
+
+  it('keeps running through the turn-over: it is allowed on the camera box, not only while a side is scanned', () => {
+    expect(src).toContain('const cameraSurface = cameraActive || turningOver;');
+    expect(src).toContain('const cameraAllowed = cameraSurface && ready');
+  });
+
+  it('is not stopped by the shutter, so a back that follows never waits for it to start again', () => {
+    expect(between('const captured = detection.capturedImage;', 'setCaptureZoom({')).not.toContain('camera.stop()');
+    expect(between('const compressed = await compressDocument(raw);', 'storeCapture(compressed, "camera");')).not.toContain('camera.stop()');
+  });
+
+  it('turns the frame’s own sample over, with the frame up, and the box keeps its lines under it', () => {
+    // The frame and its sample stay up through the turn, and the sample turns there.
+    expect(src.match(/\(camera\.isReady \|\| turningOver\) && !camera\.error/g)).toHaveLength(2);
+    expect(src.match(/turning=\{turningOver\}/g)).toHaveLength(2);
+    expect(src).toContain('side: phase === "back" || turningOver ? "back" : "front",');
+    // No second, separate card over the camera; the stand-alone one is for no camera only.
+    expect(src).not.toContain('onCamera');
+    expect(src).toContain('{showFlipBanner && !turningOver && (');
+    expect(src).toMatch(/turningOver && 'invisible'\)\}>\s*\{t\("uploadDocument\.camera\.autoCaption"\)\}/);
+    // The full screen on a phone holds too: it used to drop for the turn-over.
+    expect(between('const immersive =', ';')).not.toContain('showFlipBanner');
+  });
+
+  it('takes no second photo while the shutter zooms', () => {
+    expect(src).toContain('enabled: cameraActive && camera.isReady && !captureZoom,');
+  });
+
+  it('records each side on the one stream, and nothing during the turn-over', () => {
+    expect(src).toContain('cameraActive ? (phase === "back" ? "back" : "front") : null;');
+    expect(src).toContain('if (!camera.stream || !recordingSide) return;');
+    expect(src).toContain('}, [camera.stream, recordingSide, dispatch]);');
+  });
+
+  it('names the back in the header during the turn-over', () => {
+    expect(src).toContain('const headerPhase: ScanPhase = turningOver ? "back" : phase;');
+  });
+});
+
 describe('the capture step renews a side capture whenever a new one begins', () => {
   const src = readFileSync(new URL('../steps/DocumentCaptureStep.tsx', import.meta.url).pathname, 'utf8');
 

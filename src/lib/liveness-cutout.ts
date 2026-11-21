@@ -23,42 +23,27 @@ export const CUTOUT_MIN_WIDTH = 200;
 /** A face is taller than it is wide. */
 export const CUTOUT_ASPECT = 1.32;
 
-/** The room above the window at which the gesture picture is drawn at its
- *  full size (and, with 70 more, the long lighting note fits above it). */
-export const ROOM_FOR_GESTURE = 150;
+/** The room above the window at which the long lighting note fits over the
+ *  instruction: the note and its gap (78) and the instruction's pill (50). */
+export const ROOM_FOR_LIGHTING_NOTE = 128;
 
-/** The gesture picture's smallest side. Under this the drawing is too small
- *  to follow at arm's length. */
-export const GESTURE_MIN_SIZE = 56;
-/** What the instruction's pill and the gap under the picture take of the room. */
-export const GESTURE_PILL_ROOM = 66;
-
-/** The gesture picture at its full size, where there is the room for it. */
-export const GESTURE_FULL_SIZE = 96;
+/** What the instruction's pill needs of the room, on two lines. */
+export const INSTRUCTION_ROOM = 66;
 
 /**
- * The side of the gesture picture for the room above the window. The picture
- * ALWAYS stands on its own above the instruction: on a short phone it used to
- * move inside the instruction's pill, where it was 28 points across and easy
- * to miss beside the words. It now shrinks with the room instead, down to
- * GESTURE_MIN_SIZE, and never past [full].
- */
-export function gestureSize(room: number, full: number): number {
-  return Math.max(GESTURE_MIN_SIZE, Math.min(full, Math.floor(room - GESTURE_PILL_ROOM)));
-}
-
-/**
- * The height of the block above the window. On a phone too short for even the
- * smallest picture and its instruction, the block keeps that height and runs
- * over the window's top edge (the hair, not the face) instead of shrinking the
- * picture further.
+ * The height of the block above the window. On a phone too short for the
+ * instruction, the block keeps that height and runs over the window's top
+ * edge (the hair, not the face) instead of cutting the words off.
+ *
+ * Nothing but the instruction stands here: a gesture is asked for in words and
+ * no picture demonstrates it.
  */
 export function aboveHeight(room: number): number {
-  return Math.max(room, GESTURE_MIN_SIZE + GESTURE_PILL_ROOM);
+  return Math.max(room, INSTRUCTION_ROOM);
 }
 
 /** How much of the background colour covers the blurred feed in a lit room. */
-export const LIVENESS_TINT = 0.16;
+export const LIVENESS_TINT = 0.08;
 /** In a dark room: the step is lit so the SCREEN lights the face, and a thin
  *  tint over a dark room is a dark screen. */
 export const LIVENESS_DIM_ROOM_TINT = 0.66;
@@ -74,25 +59,48 @@ export interface Size {
 const clamp = (n: number, lo: number, hi: number): number => Math.min(hi, Math.max(lo, n));
 
 /**
- * A frame this wide is the desktop modal, not a phone. WEB ONLY: the native
- * SDKs have no desktop, so this is the one rule here with no mirror.
+ * A frame this wide is a desktop, not a phone. WEB ONLY: the native SDKs have
+ * no desktop, so the desktop rule below is the one rule here with no mirror.
  */
 export const DESKTOP_FRAME_WIDTH = 600;
-/** The desktop window: a larger share of the height, up to a wider cap. A
- *  window sized for a phone looked small in the middle of a wide modal. */
-export const DESKTOP_CUTOUT_MAX_WIDTH = 330;
-const DESKTOP_HEIGHT_SHARE = 0.56;
 const PHONE_HEIGHT_SHARE = 0.46;
 
+// The desktop window grows with the screen (user, 2026-11-17). It used to stop
+// at 330 wide, which suits the modal; on a full-screen camera the picture is
+// drawn several times larger while the window stayed the same, so a person at
+// a laptop had to move far back to get their face into it.
+//
+// A webcam's picture is drawn cover-fit, so how large a face looks follows the
+// width the picture is drawn at. The window is a set share of that width: the
+// share the modal already had, at which a person sitting at their screen fits.
+// The screen's height is the limit, since the instruction stands over the
+// window and the retry panel under it.
+/** In the modal: the window's share of the frame's height. */
+const DESKTOP_HEIGHT_SHARE = 0.56;
+/** On a taller frame the window may take all the height but this much above and
+ *  below it: the instruction over it, the retry panel under it. */
+export const DESKTOP_WINDOW_MARGIN = 150;
+/** The window's width as a share of the width the camera picture is drawn at. */
+export const DESKTOP_PICTURE_SHARE = 0.32;
+/** A webcam's picture, width over height. Assumed, so the window can be sized
+ *  before the camera has started and does not jump when it does. */
+const WEBCAM_ASPECT = 4 / 3;
+
+function desktopCutoutWidth(frame: Size): number {
+  const height = Math.max(frame.height * DESKTOP_HEIGHT_SHARE, frame.height - 2 * DESKTOP_WINDOW_MARGIN);
+  const pictureWidth = Math.max(frame.width, frame.height * WEBCAM_ASPECT);
+  return Math.max(CUTOUT_MIN_WIDTH, Math.min(frame.width - 96, height / CUTOUT_ASPECT, pictureWidth * DESKTOP_PICTURE_SHARE));
+}
+
 export function livenessCutout(frame: Size): Size {
-  const desktop = frame.width >= DESKTOP_FRAME_WIDTH;
-  const max = desktop ? DESKTOP_CUTOUT_MAX_WIDTH : CUTOUT_MAX_WIDTH;
-  const share = desktop ? DESKTOP_HEIGHT_SHARE : PHONE_HEIGHT_SHARE;
-  const width = clamp(
-    Math.min(frame.width - 96, (frame.height * share) / CUTOUT_ASPECT, max),
-    CUTOUT_MIN_WIDTH,
-    max,
-  );
+  const width =
+    frame.width >= DESKTOP_FRAME_WIDTH
+      ? desktopCutoutWidth(frame)
+      : clamp(
+          Math.min(frame.width - 96, (frame.height * PHONE_HEIGHT_SHARE) / CUTOUT_ASPECT, CUTOUT_MAX_WIDTH),
+          CUTOUT_MIN_WIDTH,
+          CUTOUT_MAX_WIDTH,
+        );
   return { width, height: width * CUTOUT_ASPECT };
 }
 
@@ -119,16 +127,15 @@ export function surroundPath(outer: Size, left: number, top: number, window: Siz
 }
 
 // The window sits a little BELOW the centre on a short screen, and only by
-// what the block above it is short of. That block is the gesture picture and
-// the instruction. The picture is narrow and centred, so it rises into the gap
-// BETWEEN the back and close buttons (ImmersiveFrame); only the instruction,
-// which is wide, has to stay under them. The window used to be dropped to fit
-// the picture under the buttons too, which on a short phone pushed the face
-// well below the middle and still left a small picture. The face is judged
-// against the window wherever it sits (faceWindowFor takes the drop).
-/** The room wanted above the window, from the top inset down: the gap over the
- *  picture (8), the picture on its plate (108), the gap under it (8), the
- *  instruction (46) and the gap over the window (20). */
+// what the block above it is short of. The face is judged against the window
+// wherever it sits (faceWindowFor takes the drop).
+//
+// The room was sized when a gesture picture stood over the instruction: a gap
+// (8), the picture on its plate (108), a gap (8), the instruction (46) and the
+// gap over the window (20). The web no longer has the picture; the mobile SDKs
+// still do. The number is kept so the window is in the same place in all
+// three, and it changes in all three together.
+/** The room wanted above the window, from the top inset down. */
 export const WINDOW_TOP_ROOM = 190;
 /** What must stay below the window: the gap under it, the retry panel a failed
  *  check shows there (its words and its button), and the gap to the edge. It

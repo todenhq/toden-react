@@ -10,7 +10,9 @@ export const UPLOAD_DOCUMENT_CAPTURE_ENTRIES: TextEntry[] = [
 
   // Header: title and description per phase.
   { key: 'uploadDocument.title.scanFront', label: 'Title: scan the front', default: 'Scan Front of Your {document}', placeholders: DOC },
-  { key: 'uploadDocument.title.capture', label: 'Title: capture a one-sided document', default: 'Capture Your {document}', placeholders: DOC },
+  // One-sided documents (a passport page, a one-sided card) are scanned, in the
+  // same words as the two-sided ones.
+  { key: 'uploadDocument.title.capture', label: 'Title: scan a one-sided document', default: 'Scan Your {document}', placeholders: DOC },
   { key: 'uploadDocument.title.uploadFront', label: 'Title: upload the front', default: 'Upload Front of Your {document}', placeholders: DOC },
   { key: 'uploadDocument.title.upload', label: 'Title: upload a one-sided document', default: 'Upload Your {document}', placeholders: DOC },
   { key: 'uploadDocument.title.frontCaptured', label: 'Title: front captured', default: 'Front Side Captured' },
@@ -21,8 +23,8 @@ export const UPLOAD_DOCUMENT_CAPTURE_ENTRIES: TextEntry[] = [
   { key: 'uploadDocument.description.scanFront', label: 'Description: scan the front', default: 'Place the FRONT of your {document} within the frame.', placeholders: DOC },
   {
     key: 'uploadDocument.description.capture',
-    label: 'Description: capture a one-sided document',
-    default: 'Photograph your {document}. Position it within the frame and hold steady.',
+    label: 'Description: scan a one-sided document',
+    default: 'Place your {document} within the frame.',
     placeholders: DOC,
     multiline: true,
   },

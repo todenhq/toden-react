@@ -1,4 +1,5 @@
 import type { ApplicantWorkflowPayload, WorkflowConfigPayload } from '../services/api';
+import type { VoiceGuidanceConfig, VoiceGuidanceOption } from '../types/config';
 
 /**
  * The prop keys a published flow may override. Exactly the template surface —
@@ -31,6 +32,9 @@ const WORKFLOW_KEYS = [
   'flashSequenceLength',
   'maxLivenessAttempts',
   'livenessBrightScreen',
+  'livenessGestureGuide',
+  'livenessGestureSet',
+  'livenessDirectionCount',
   'selfieReview',
   'deviceIntelligence',
   'deviceHandoff',
@@ -69,6 +73,8 @@ type WorkflowKey = (typeof WORKFLOW_KEYS)[number];
  * shallowly with flow keys winning per-field, so a flow that only sets
  * `primaryColor` doesn't wipe a prop-supplied `logo`, and a flow that only
  * switches the selfie review on doesn't wipe a host's `doneButton: false`.
+ * `voiceGuidance` is the one key where the prop wins, key by key (see
+ * {@link mergeVoiceGuidance}).
  *
  * Pure and side-effect free — unit-tested in flow-merge.test.ts.
  */
@@ -82,7 +88,9 @@ export function mergeWorkflowConfig<P extends Record<string, unknown>>(
   for (const key of WORKFLOW_KEYS) {
     const value = flow[key as WorkflowKey];
     if (value === undefined) continue;
-    if (key === 'appearance' || key === 'biometric') {
+    if (key === 'voiceGuidance') {
+      merged[key] = mergeVoiceGuidance(value, props[key] as VoiceGuidanceOption | undefined);
+    } else if (key === 'appearance' || key === 'biometric') {
       const propBlock = props[key];
       merged[key] = {
         ...(typeof propBlock === 'object' && propBlock !== null ? propBlock : {}),
@@ -114,6 +122,30 @@ export function mergeWorkflowConfig<P extends Record<string, unknown>>(
   return merged as P;
 }
 
+function voiceGuidanceObject(option: unknown): VoiceGuidanceConfig {
+  if (typeof option === 'boolean') return { enabled: option };
+  if (typeof option !== 'object' || option === null) return {};
+  return Object.fromEntries(
+    Object.entries(option).filter(([, value]) => value !== undefined),
+  ) as VoiceGuidanceConfig;
+}
+
+/**
+ * The workflow's `voiceGuidance` with the SDK prop over it, key by key (the
+ * voice guidance contract, kyc-core docs/VOICE_GUIDANCE.md): a prop
+ * `{ voice: 'rory' }` keeps the workflow's `enabled` and `language`, and a
+ * bare boolean prop overrides `enabled` only. No prop leaves the workflow's
+ * value untouched, a bare boolean included.
+ */
+export function mergeVoiceGuidance(
+  workflow: unknown,
+  prop: VoiceGuidanceOption | undefined,
+): VoiceGuidanceOption | undefined {
+  if (prop === undefined) return workflow as VoiceGuidanceOption | undefined;
+  if (workflow === undefined) return prop;
+  return { ...voiceGuidanceObject(workflow), ...voiceGuidanceObject(prop) };
+}
+
 /**
  * The template keys a mapped APPLICANT workflow (business.applicant.workflowId)
  * overlays onto a KYB mount — the individual capture-leg surface only. KYB
@@ -139,6 +171,9 @@ const APPLICANT_LEG_KEYS = [
   'flashSequenceLength',
   'maxLivenessAttempts',
   'livenessBrightScreen',
+  'livenessGestureGuide',
+  'livenessGestureSet',
+  'livenessDirectionCount',
   'selfieReview',
   'nfc',
 ] as const;

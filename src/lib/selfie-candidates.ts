@@ -11,7 +11,7 @@ import { calculateEAR } from '../liveness/gesture-detector';
 import type { NormalizedLandmark } from '../liveness/types';
 import { faceBoxOf } from './light-level';
 import { laplacianVariance } from './selfie-sharpness';
-import { headPose, isFrontal, mirrorRect, selfieFrame, selfieScore, SELFIE_MAX_WIDTH } from './selfie-pick';
+import { headPose, isFrontal, mirrorRect, selfieFrame, selfieScore, SELFIE_MAX_WIDTH, type ShareBox } from './selfie-pick';
 
 /** Why a frame was or was not kept, so the capture step can say what to fix. */
 export type SelfieVerdict = 'kept' | 'worse' | 'turned' | 'far' | 'eyes';
@@ -22,12 +22,24 @@ const EYES_OPEN_SHARE = 0.75;
 const SHARPNESS_WIDTH = 120;
 
 export class SelfieCandidates {
-  private best: { canvas: HTMLCanvasElement; score: number } | null = null;
+  private best: { canvas: HTMLCanvasElement; score: number; face: ShareBox } | null = null;
+  /** The whole frame the best selfie was cut from, as the camera showed it. */
+  private scene: HTMLCanvasElement | null = null;
   private openEar = 0;
 
   /** The best selfie so far, already cut to the standard frame. */
   get bestCanvas(): HTMLCanvasElement | null {
     return this.best?.canvas ?? null;
+  }
+
+  /**
+   * The whole camera frame that selfie was cut from (mirrored, as the person
+   * saw it) and where the face is in it, in shares of the frame. The review
+   * shows this, so it looks as the camera did (lib/selfie-review.ts). It never
+   * leaves the browser.
+   */
+  get bestScene(): { canvas: HTMLCanvasElement; face: ShareBox } | null {
+    return this.best && this.scene ? { canvas: this.scene, face: this.best.face } : null;
   }
 
   clear(): void {
@@ -60,7 +72,13 @@ export class SelfieCandidates {
     canvas.width = Math.round(source.width * scale);
     canvas.height = Math.round(source.height * scale);
     canvas.getContext('2d')?.drawImage(snap, source.x, source.y, source.width, source.height, 0, 0, canvas.width, canvas.height);
-    this.best = { canvas, score };
+    // One canvas, drawn over each time a better frame is kept.
+    const scene = this.scene ?? document.createElement('canvas');
+    if (scene.width !== snap.width) scene.width = snap.width;
+    if (scene.height !== snap.height) scene.height = snap.height;
+    scene.getContext('2d')?.drawImage(snap, 0, 0);
+    this.scene = scene;
+    this.best = { canvas, score, face: { x: 1 - box.x - box.width, y: box.y, width: box.width, height: box.height } };
     return 'kept';
   }
 }

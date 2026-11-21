@@ -13,7 +13,7 @@ import {
 } from '../components/icons';
 import { StepHeader } from "../components/StepHeader";
 import { ReadyPrimer } from "../components/ReadyPrimer";
-import { READY_DOCUMENT } from "../components/ready-primer-content";
+import { documentReady } from "../components/ready-primer-content";
 import { ImageCropper } from "../components/ImageCropper";
 import { DocumentReview } from "./DocumentReview";
 import { Button } from "../components/ui/button";
@@ -97,6 +97,8 @@ import {
 } from "../lib/capture-settings";
 import { verifiedIdsFromState } from '../lib/supporting-documents';
 import { useText } from "../i18n";
+import { captureRejectedDetail, journeyUpload } from "../lib/journey";
+import { recordJourneyEvent } from "../lib/step-log";
 
 // Scan phases:
 //   front         — camera open for front side
@@ -177,6 +179,8 @@ export function DocumentCaptureStep() {
 		: null;
 	const idTypeLabel =
 		idTypeDef?.label ?? state.selectedIdType ?? t("uploadDocument.documentFallback");
+	// What the step calls it: "Passport", not "International Passport".
+	const documentName = shortDocumentLabel(state.selectedIdType, idTypeLabel);
 
 	const scanSides = idTypeDef?.scanSides ?? "front_only";
 	const isTwoSided = scanSides === "front_and_back";
@@ -198,9 +202,6 @@ export function DocumentCaptureStep() {
 		state.documentBackImage,
 	);
 	const [showFlipBanner, setShowFlipBanner] = useState(false);
-	const [flipCanSkip, setFlipCanSkip] = useState(false);
-	// The prompt has shown the back, so the guide need not show it again.
-	const [backAnnounced, setBackAnnounced] = useState(false);
 	const flipTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 	useEffect(
 		() => () => {
@@ -267,17 +268,33 @@ export function DocumentCaptureStep() {
 	const [ready, setReady] = useState(false);
 	const showReadyPrimer = cameraActive && !ready;
 	const needsPrimer = cameraActive && ready && primerStatus === "needed" && !primed;
+	// "Now turn it over", played IN the camera's frame: the frame's own sample
+	// turns from the front to the back where it stands (DocumentGhost), and the
+	// camera keeps running from the front to the back. It used to stop
+	// at the shutter, show the turn-over in a layout of its own (with the badge
+	// row back above it), then start again behind a spinner once the turn-over
+	// ended: the camera read as ending and starting again, and the screen moved
+	// twice (user, 2026-11-18). Only on the camera path, with the camera
+	// already allowed; otherwise the turn-over stands on its own as before.
+	const turningOver =
+		showFlipBanner &&
+		allowScan &&
+		!pauseForCrop &&
+		ready &&
+		(primerStatus === "granted" || primed);
+	// The camera's box is on screen: a side being scanned, or the turn-over
+	// between the two.
+	const cameraSurface = cameraActive || turningOver;
 	// The viewfinder is genuinely on screen — not merely "the camera phase".
-	// The primers and the flip banner occupy the same space without a guide, so
-	// anything that steps aside for the viewfinder must test this, not
-	// `cameraActive`, or it disappears behind a panel that never replaced it.
-	const viewfinderVisible =
-		cameraActive && !showReadyPrimer && !needsPrimer && !showFlipBanner;
+	// The primers occupy the same space without a guide, so anything that
+	// steps aside for the viewfinder must test this, not `cameraActive`, or it
+	// disappears behind a panel that never replaced it.
+	const viewfinderVisible = cameraSurface && !showReadyPrimer && !needsPrimer;
 
 	// Document capture runs at a higher resolution than liveness so the still
 	// image stays sharp enough for OCR (see capture-settings.ts). The video is
 	// kept small via the bitrate + frame-rate caps, not by lowering resolution.
-	const cameraAllowed = cameraActive && ready && (primerStatus === "granted" || primed);
+	const cameraAllowed = cameraSurface && ready && (primerStatus === "granted" || primed);
 	// Sound on the clip. Answered before the camera opens, because a recording
 	// cannot gain a track once it has started. Refused costs the sound alone.
 	const wantsAudio = recordsDocumentAudio(config);
@@ -336,7 +353,9 @@ export function DocumentCaptureStep() {
 	const detection = useDocumentDetection({
 		videoRef: camera.videoRef,
 		canvasRef: detectionCanvasRef,
-		enabled: cameraActive && camera.isReady,
+		// Not while the shutter's zoom plays: the camera keeps running under it
+		// now, and a second photo must not be taken of the side just taken.
+		enabled: cameraActive && camera.isReady && !captureZoom,
 		faceRef,
 		uprightDocument: turned,
 		getVisibleRegion: (frame) => {
@@ -364,7 +383,7 @@ export function DocumentCaptureStep() {
 	// would be a webcam filling a monitor.
 	//
 	// Gated on the preview actually being live, so the chrome stays put through
-	// the primer, the permission prompt and the flip banner — going immersive
+	// the primer and the permission prompt — going immersive
 	// before there is anything to see reads as the UI vanishing.
 	const torch = useTorch(camera.stream);
 	const setImmersiveCapture = useSetImmersiveCapture();
@@ -379,11 +398,10 @@ export function DocumentCaptureStep() {
 	// needs the step's header for context and a way out.
 	const immersive =
 		!isDesktopDevice() &&
-		cameraActive &&
+		cameraSurface &&
 		!camera.error &&
 		!showReadyPrimer &&
-		!needsPrimer &&
-		!showFlipBanner;
+		!needsPrimer;
 
 	// A picked photo's crop screen takes the surface on a phone too, as the
 	// React Native cropper does: it opens from the full-screen camera and is
@@ -402,7 +420,8 @@ export function DocumentCaptureStep() {
 		idType: state.selectedIdType,
 		title: specimenTitle(state.selectedIdType, idTypeLabel),
 		country: specimenCountry ? regionCountryName(specimenCountry) : null,
-		side: phase === "back" ? "back" : "front",
+		// The back from the moment the card is turned over.
+		side: phase === "back" || turningOver ? "back" : "front",
 	};
 
 	// Auto-capture framing gate — the Flutter logic, fed from this SDK's edge
@@ -465,7 +484,7 @@ export function DocumentCaptureStep() {
 	// this device the shutter keeps its old guide crop so nobody is stranded.
 	const shutterBlocked = detection.detectorAvailable && detection.cornerProblem !== null;
 	const shutterBlockedReason = shutterBlocked
-		? documentHintText(CORNER_HINTS[detection.cornerProblem ?? "no_document"], idTypeLabel, t)
+		? documentHintText(CORNER_HINTS[detection.cornerProblem ?? "no_document"], documentName, t)
 		: null;
 
 	// Report a denied camera permission to onError once. Document capture still
@@ -529,8 +548,14 @@ export function DocumentCaptureStep() {
 	// so starting the back's recording never drops the front's upload in flight.
 	const recordingTokenRef = useRef(emptyRecordingCaptures());
 
+	// The side being recorded. The stream now runs on from the front to the
+	// back, so a new side, not a new stream, is what starts the next recording;
+	// nothing is recorded during the turn-over between them.
+	const recordingSide: "front" | "back" | null =
+		cameraActive ? (phase === "back" ? "back" : "front") : null;
+
 	useEffect(() => {
-		if (!camera.stream) return;
+		if (!camera.stream || !recordingSide) return;
 
 		const created = createVideoRecorder(camera.stream, DOCUMENT_VIDEO_BITRATE, microphoneRef.current);
 		if (!created) return; // MediaRecorder not supported in this browser
@@ -539,10 +564,8 @@ export function DocumentCaptureStep() {
 		// of a discarded one could land in the next one's file.
 		let chunks: Blob[] = [];
 
-		// Capture which side this recording is for. The recorder is created when the
-		// camera stream becomes available, which only happens while we're in the
-		// 'front' or 'back' capture phases.
-		const sideAtStart: "front" | "back" = phase === "back" ? "back" : "front";
+		// Capture which side this recording is for.
+		const sideAtStart: "front" | "back" = recordingSide;
 		recordingSideRef.current = sideAtStart;
 		// A new capture of this side: whatever recording it had before (an
 		// earlier take, or one restored with a resumed session) is not this one's.
@@ -574,7 +597,7 @@ export function DocumentCaptureStep() {
 				// fails. A multi-ID run's recordings are per ID and go at submit.
 				if (!multiIdRef.current) {
 					const type = sideAtStart === "back" ? "document_back_video" : "document_front_video";
-					void withRetry(() => config.api.upload(blob, type)).then(
+					void journeyUpload(type, () => withRetry(() => config.api.upload(blob, type))).then(
 						(mediaId) => {
 							if (!isCurrentCapture(recordingTokenRef.current, sideAtStart, token)) return;
 							dispatch({
@@ -609,7 +632,7 @@ export function DocumentCaptureStep() {
 			if (recorderRef.current === recorder) recorderRef.current = null;
 		};
 		// eslint-disable-next-line react-hooks/exhaustive-deps
-	}, [camera.stream, dispatch]);
+	}, [camera.stream, recordingSide, dispatch]);
 
 	// Stop the active recorder. When `save` is true, the existing onstop handler
 	// dispatches the blob to the right slot. When false (user-initiated discard),
@@ -648,15 +671,18 @@ export function DocumentCaptureStep() {
 		// The region the photo actually kept (corners plus bleed), so the zoom
 		// lands on exactly what was stored.
 		const bounds = detection.captureBounds;
-		// Snapshot the live frame BEFORE stopping the camera, so we can animate the
-		// crop-in (camera zooming onto the document) rather than hard-cutting to the
-		// tight cropped still. Falls back to an instant swap when we can't animate.
+		// Snapshot the live frame, so we can animate the crop-in (camera zooming
+		// onto the document) rather than hard-cutting to the tight cropped still.
+		// Falls back to an instant swap when we can't animate.
+		//
+		// The camera is not stopped here. Leaving the side stops it (the review,
+		// or a front to look at first), and a back that follows straight away
+		// keeps it running through the turn-over (`turningOver`).
 		const video = camera.videoRef.current;
 		const snap =
 			video && bounds && video.videoWidth > 0 ? grabFrameSnapshot(video) : null;
 		detection.reset();
 		stopDocRecorder(true);
-		camera.stop();
 		if (snap && bounds && !prefersReducedMotion()) {
 			setCaptureZoom({
 				snapshot: snap.url,
@@ -720,7 +746,6 @@ export function DocumentCaptureStep() {
 	function finishFlip() {
 		if (flipTimerRef.current) clearTimeout(flipTimerRef.current);
 		flipTimerRef.current = null;
-		setFlipCanSkip(false);
 		setShowFlipBanner(false);
 		setPhase("back");
 		detection.reset();
@@ -738,8 +763,6 @@ export function DocumentCaptureStep() {
 			return;
 		}
 		setShowFlipBanner(true);
-		setBackAnnounced(true);
-		setFlipCanSkip(hold === FLIP_UNTAPPED_MS);
 		flipTimerRef.current = setTimeout(finishFlip, hold);
 	}
 
@@ -872,7 +895,7 @@ export function DocumentCaptureStep() {
 		const compressed = await compressDocument(raw);
 		logCaptureSize("document still (manual)", compressed);
 		stopDocRecorder(true);
-		camera.stop();
+		// Not stopped: see the auto-capture above.
 		detection.reset();
 		setUploadError(null);
 		storeCapture(compressed, "camera");
@@ -950,9 +973,8 @@ export function DocumentCaptureStep() {
 
 			// Upload front (retried on transient failures: network / timeout / 5xx)
 			const frontBlob = toBlob(frontPreview);
-			const frontMediaId = await withRetry(
-				() => api.upload(frontBlob, "document_front"),
-				{ onRetry },
+			const frontMediaId = await journeyUpload("document_front", () =>
+				withRetry(() => api.upload(frontBlob, "document_front"), { onRetry }),
 			);
 			dispatch({
 				type: "SET_MEDIA_ID",
@@ -965,9 +987,8 @@ export function DocumentCaptureStep() {
 			];
 			if (isTwoSided && backPreview) {
 				const backBlob = toBlob(backPreview);
-				const backMediaId = await withRetry(
-					() => api.upload(backBlob, "document_back"),
-					{ onRetry },
+				const backMediaId = await journeyUpload("document_back", () =>
+					withRetry(() => api.upload(backBlob, "document_back"), { onRetry }),
 				);
 				dispatch({
 					type: "SET_MEDIA_ID",
@@ -983,6 +1004,8 @@ export function DocumentCaptureStep() {
 			const problems = await checkCapture(uploads);
 			setIsUploading(false);
 			if (problems.length > 0) {
+				// The first problem is the one asked to be fixed (drop-off insights).
+				recordJourneyEvent("capture_rejected", captureRejectedDetail(problems[0].kind));
 				setCaptureProblems(problems);
 				return;
 			}
@@ -1093,30 +1116,34 @@ export function DocumentCaptureStep() {
 	);
 
 	// Each case is its own catalogue entry, so a workflow can reword it whole.
-	const doc = { document: idTypeLabel };
+	const doc = { document: documentName };
+	// During the turn-over the header already says what comes next: the back.
+	// "Tap Next" would name a button that is not there, and changing the header
+	// when the turn-over ends would move the box under it.
+	const headerPhase: ScanPhase = turningOver ? "back" : phase;
 	const titleKey =
-		phase === "front" ?
+		headerPhase === "front" ?
 			isTwoSided ?
 				uploadOnly ? "uploadDocument.title.uploadFront" : "uploadDocument.title.scanFront"
 			: uploadOnly ? "uploadDocument.title.upload"
 			: "uploadDocument.title.capture"
-		: phase === "front-preview" ?
+		: headerPhase === "front-preview" ?
 			uploadOnly ? "uploadDocument.title.frontAdded" : "uploadDocument.title.frontCaptured"
-		: phase === "back" ?
+		: headerPhase === "back" ?
 			uploadOnly ? "uploadDocument.title.uploadBack" : "uploadDocument.title.scanBack"
 		: "uploadDocument.title.review";
 	const title = t(titleKey, doc);
 
 	// Upload-only copy: the same beats, with the camera's words taken out.
 	const descriptionKey =
-		phase === "front" ?
+		headerPhase === "front" ?
 			isTwoSided ?
 				uploadOnly ? "uploadDocument.description.uploadFront" : "uploadDocument.description.scanFront"
 			: uploadOnly ? "uploadDocument.description.upload"
 			: "uploadDocument.description.capture"
-		: phase === "front-preview" ?
+		: headerPhase === "front-preview" ?
 			uploadOnly ? "uploadDocument.description.frontAdded" : "uploadDocument.description.frontCaptured"
-		: phase === "back" ?
+		: headerPhase === "back" ?
 			uploadOnly ? "uploadDocument.description.uploadBack" : "uploadDocument.description.scanBack"
 		: isTwoSided ?
 			uploadOnly ? "uploadDocument.description.reviewBothAdded" : "uploadDocument.description.reviewBoth"
@@ -1220,7 +1247,7 @@ export function DocumentCaptureStep() {
 					<span className='font-medium shrink-0'>
 						{t("uploadDocument.badge.required")}
 					</span>
-					<span className='min-w-0 wrap-break-word'>{idTypeLabel}</span>
+					<span className='min-w-0 wrap-break-word'>{documentName}</span>
 					{isTwoSided && phase !== "review" && (
 						<span className='shrink-0 rounded-full bg-primary/15 px-2 py-0.5 text-xs font-semibold'>
 							{t(
@@ -1239,15 +1266,14 @@ export function DocumentCaptureStep() {
 			</div>
 			)}
 
-			{/* The document turning over */}
-			{showFlipBanner && (
+			{/* The document turning over, where there is no camera box to play it in.
+			    On the camera path it plays inside the box (below). */}
+			{showFlipBanner && !turningOver && (
 				<TurnOverPrompt
 					message={t("uploadDocument.flipBanner")}
-					doneLabel={flipCanSkip ? t("uploadDocument.flipDone") : null}
 					aspect={documentAspect}
 					accent={config.appearance?.primaryColor ?? "#5645F5"}
 					subject={specimen}
-					onDone={finishFlip}
 				/>
 			)}
 
@@ -1263,7 +1289,7 @@ export function DocumentCaptureStep() {
 			{/* ------------------------------------------------------------------ */}
 			{/* Front preview                                                        */}
 			{/* ------------------------------------------------------------------ */}
-			{phase === "front-preview" && !(showFlipBanner && config.documentReview !== true) && (
+			{phase === "front-preview" && !turningOver && !(showFlipBanner && config.documentReview !== true) && (
 				<div className='space-y-4'>
 					{/* Capped for the same reason as the review preview: at natural
 					    aspect a document fills a desktop modal and pushes Retake and
@@ -1360,7 +1386,15 @@ export function DocumentCaptureStep() {
 			{/* Camera permission primer (before the OS prompt)                     */}
 			{/* ------------------------------------------------------------------ */}
 			{showReadyPrimer && !showFlipBanner && (
-				<ReadyPrimer {...READY_DOCUMENT} onReady={() => setReady(true)} />
+				<ReadyPrimer
+					{...documentReady({
+						name: documentName,
+						subject: { idType: specimen.idType, title: specimen.title, country: specimen.country },
+						twoSided: isTwoSided,
+						accent: config.appearance?.primaryColor ?? "#5645F5",
+					})}
+					onReady={() => setReady(true)}
+				/>
 			)}
 
 			{needsPrimer && !showFlipBanner && (
@@ -1417,18 +1451,22 @@ export function DocumentCaptureStep() {
 							aria-hidden='true'
 						/>
 
-						{camera.isReady && !camera.error && !immersive && (
+						{(camera.isReady || turningOver) && !camera.error && !immersive && (
 							<InlineOverlay
-								side={phase === "back" ? "back" : "front"}
+								side={phase === "back" || turningOver ? "back" : "front"}
 								documentLabel={shortDocumentLabel(state.selectedIdType, idTypeLabel)}
 								specimen={specimen}
-								showSpecimen={!(phase === "back" && backAnnounced)}
+								// The side's sample in the frame, the back's included: the turn-over
+								// shows the card turning, the frame shows where the back goes
+								// (user, 2026-11-18; it was hidden after the turn-over).
+								showSpecimen
+								turning={turningOver}
 								country={state.selectedCountry ?? config.country ?? null}
 								guideAspect={guideAspect}
 								framing={guidance.framing}
 								progress={dwell}
-								hint={documentHintText(guidance.hint, idTypeLabel, t)}
-								hintTone={immersiveHintTone({
+								hint={turningOver ? t("uploadDocument.flipBanner") : documentHintText(guidance.hint, documentName, t)}
+								hintTone={turningOver ? "neutral" : immersiveHintTone({
 									hint: guidance.hint,
 									framing: guidance.framing,
 									hintIsAction: shutterBlocked || documentHintIsAction(guidance.hint),
@@ -1436,7 +1474,7 @@ export function DocumentCaptureStep() {
 								})}
 								busy={isCompressing}
 								onCapture={handleManualCapture}
-								shutterBlockedReason={shutterBlockedReason}
+								shutterBlockedReason={turningOver ? t("uploadDocument.flipBanner") : shutterBlockedReason}
 								hasTorch={torch.hasTorch}
 								torch={torch.torch}
 								onToggleTorch={torch.toggleTorch}
@@ -1444,18 +1482,22 @@ export function DocumentCaptureStep() {
 							/>
 						)}
 
-						{camera.isReady && !camera.error && immersive && (
+						{(camera.isReady || turningOver) && !camera.error && immersive && (
 							<ImmersiveOverlay
-								side={phase === "back" ? "back" : "front"}
+								side={phase === "back" || turningOver ? "back" : "front"}
 								documentLabel={shortDocumentLabel(state.selectedIdType, idTypeLabel)}
 								specimen={specimen}
-								showSpecimen={!(phase === "back" && backAnnounced)}
+								// The side's sample in the frame, the back's included: the turn-over
+								// shows the card turning, the frame shows where the back goes
+								// (user, 2026-11-18; it was hidden after the turn-over).
+								showSpecimen
+								turning={turningOver}
 								country={state.selectedCountry ?? config.country ?? null}
 								guideAspect={guideAspect}
 								framing={guidance.framing}
 								progress={dwell}
-								hint={documentHintText(guidance.hint, idTypeLabel, t)}
-								hintTone={immersiveHintTone({
+								hint={turningOver ? t("uploadDocument.flipBanner") : documentHintText(guidance.hint, documentName, t)}
+								hintTone={turningOver ? "neutral" : immersiveHintTone({
 									hint: guidance.hint,
 									framing: guidance.framing,
 									hintIsAction: shutterBlocked || documentHintIsAction(guidance.hint),
@@ -1466,9 +1508,9 @@ export function DocumentCaptureStep() {
 								hasTorch={torch.hasTorch}
 								onToggleTorch={torch.toggleTorch}
 								onCapture={handleManualCapture}
-								shutterBlockedReason={shutterBlockedReason}
+								shutterBlockedReason={turningOver ? t("uploadDocument.flipBanner") : shutterBlockedReason}
 								onBack={handleBack}
-								onUpload={allowUpload ? openUpload : null}
+								onUpload={allowUpload && !turningOver ? openUpload : null}
 								onGuideBand={(band) => {
 									guideBandRef.current = band;
 								}}
@@ -1478,7 +1520,7 @@ export function DocumentCaptureStep() {
 							/>
 						)}
 
-						{!camera.isReady && !camera.error && (
+						{!camera.isReady && !camera.error && !turningOver && (
 							<div className='absolute inset-0 flex items-center justify-center bg-black/70'>
 								<div className='h-8 w-8 animate-spin rounded-full border-2 border-white border-t-transparent' />
 								{/* Immersive has hidden the step header, so this is the only
@@ -1544,8 +1586,12 @@ export function DocumentCaptureStep() {
 					{/* Below-camera chrome. All of it is carried by the immersive
 					    overlay instead — the hint and lighting warning become the bar's
 					    hint line, and the upload link becomes its gallery control. */}
+					{/* Kept in place but hidden during the turn-over, so nothing moves
+					    when it ends. */}
 					{!immersive && (
-						<p className='text-center text-xs text-muted-foreground'>
+						<p
+							aria-hidden={turningOver || undefined}
+							className={cn('text-center text-xs text-muted-foreground', turningOver && 'invisible')}>
 							{t("uploadDocument.camera.autoCaption")}
 						</p>
 					)}
@@ -1553,7 +1599,7 @@ export function DocumentCaptureStep() {
 					{/* Only "too bright" here: "too dark" is the instruction inside the
 					    box already (the framing gate's moreLight hint), so a tip
 					    beneath it would say the same thing twice. */}
-					{!immersive && isBright && (
+					{!immersive && isBright && !turningOver && (
 						<div className='flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2.5 text-xs text-amber-800 animate-lighting-in dark:border-amber-800 dark:bg-amber-900/20 dark:text-amber-400'>
 							<svg
 								xmlns='http://www.w3.org/2000/svg'
@@ -1576,7 +1622,9 @@ export function DocumentCaptureStep() {
 					)}
 
 					{allowUpload && !immersive && (
-						<div className='flex items-center justify-center gap-1.5 text-xs text-muted-foreground'>
+						<div
+							aria-hidden={turningOver || undefined}
+							className={cn('flex items-center justify-center gap-1.5 text-xs text-muted-foreground', turningOver && 'invisible')}>
 							<span>{t("uploadDocument.camera.havingTrouble")}</span>
 							<button
 								type='button'

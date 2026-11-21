@@ -5,6 +5,7 @@ import { isAcceptedAddressPhoto } from '../components/AddressPhotoUpload';
 import { IMAGE_MAX_BYTES } from '../lib/upload-limits';
 import { defaultText } from '../i18n/translate';
 import type { TextFn } from '../i18n/types';
+import { journeyUpload } from '../lib/journey';
 
 const FIX_TIMEOUT_MS = 8_000;
 
@@ -205,7 +206,7 @@ export async function uploadAddressPhoto(
   // later with a worse message.
   if (file.size > IMAGE_MAX_BYTES) throw new Error(t('address.photo.error.size'));
   try {
-    return await api.upload(file, 'address_photo');
+    return await journeyUpload('address_photo', () => api.upload(file, 'address_photo'));
   } catch {
     throw new Error(t('address.photo.error.upload'));
   }

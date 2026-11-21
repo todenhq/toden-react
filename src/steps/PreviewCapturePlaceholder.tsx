@@ -5,9 +5,13 @@ import { Camera, ImageUp, ScanFace, Video } from '../components/icons';
 import { StepHeader } from '../components/StepHeader';
 import { Button } from '../components/ui/button';
 import { ReadyPrimer } from '../components/ReadyPrimer';
-import { READY_DOCUMENT, READY_LIVENESS } from '../components/ready-primer-content';
+import { documentReady, READY_LIVENESS, READY_LIVENESS_DIRECTIONS, READY_LIVENESS_PASSIVE } from '../components/ready-primer-content';
 import { useVerificationContext } from '../context/VerificationContext';
 import { useVerificationConfig } from '../context/VerificationConfigContext';
+import { useText } from '../i18n';
+import { shortDocumentLabel } from '../lib/document-label';
+import { specimenTitle } from '../lib/document-specimen';
+import { regionCountryName } from '../lib/regions';
 import { stepAfterCapture } from '../lib/post-capture';
 import { documentCaptureMethods } from '../lib/document-capture-methods';
 import { verifiedIdsFromState } from '../lib/supporting-documents';
@@ -24,6 +28,7 @@ import { useReportLivenessCamera } from '../components/liveness-camera';
 export function PreviewCapturePlaceholder({ kind }: { kind: 'document' | 'liveness' }) {
   const { state, dispatch } = useVerificationContext();
   const config = useVerificationConfig();
+  const t = useText();
   // The real steps open with a "here's what happens next" screen before the
   // camera. Preview mode swaps the WHOLE step for this placeholder, so without
   // repeating the gate here the builder would show a flow its end users never
@@ -34,6 +39,21 @@ export function PreviewCapturePlaceholder({ kind }: { kind: 'document' | 'livene
   // upload screen. The preview shows that screen too, never the camera stand-in.
   const uploadOnlyDocument = kind === 'document' && !documentCaptureMethods(config).scan;
   const showReady = !ready && !uploadOnlyDocument;
+  // The document step's heading as it opens: the front of a two-sided ID, or
+  // the whole of a one-sided one (DocumentCaptureStep).
+  const idTypeDef = state.selectedIdType ? config.getIdTypeDefinition(state.selectedIdType) : null;
+  const fullName = idTypeDef?.label ?? state.selectedIdType ?? t('uploadDocument.documentFallback');
+  // What the step calls it: "Passport", not "International Passport".
+  const documentName = { document: shortDocumentLabel(state.selectedIdType, fullName) };
+  const country = state.selectedCountry ?? config.country ?? null;
+  const twoSided = (idTypeDef?.scanSides ?? 'front_only') === 'front_and_back';
+  const documentKeys = twoSided
+    ? uploadOnlyDocument
+      ? { title: 'uploadDocument.title.uploadFront', description: 'uploadDocument.description.uploadFront' }
+      : { title: 'uploadDocument.title.scanFront', description: 'uploadDocument.description.scanFront' }
+    : uploadOnlyDocument
+      ? { title: 'uploadDocument.title.upload', description: 'uploadDocument.description.upload' }
+      : { title: 'uploadDocument.title.capture', description: 'uploadDocument.description.capture' };
   // Bright screen: the stand-in for the selfie camera holds the flow light,
   // exactly where the real step does. The ready screen keeps the org's theme.
   useReportLivenessCamera(kind === 'liveness' && !showReady);
@@ -68,19 +88,12 @@ export function PreviewCapturePlaceholder({ kind }: { kind: 'document' | 'livene
 
   return (
     <div className="space-y-6 animate-slide-up">
+      {/* Each heading is the real step's own, as it opens, so a workflow's own
+          wording shows here too. Liveness names no method, since not every
+          method asks for a gesture (flash and passive ask for none). */}
       <StepHeader
-        title={
-          uploadOnlyDocument
-            ? 'Upload your document'
-            : kind === 'document' ? 'Scan your document' : 'Confirm you’re present'
-        }
-        description={
-          kind === 'document'
-            ? uploadOnlyDocument
-              ? 'Real users upload a photo of the front (and back) of their ID here.'
-              : 'Real users capture the front (and back) of their ID here.'
-            : 'Real users complete gesture challenges and a selfie here.'
-        }
+        title={kind === 'liveness' ? t('presence.title') : t(documentKeys.title, documentName)}
+        description={kind === 'liveness' ? t('presence.intro.description') : t(documentKeys.description, documentName)}
         onBack={handleBack}
       />
 
@@ -88,7 +101,22 @@ export function PreviewCapturePlaceholder({ kind }: { kind: 'document' | 'livene
         // Same gate the real steps open with, so the builder shows the flow end
         // users actually walk. Continuing lands on the camera stand-in below.
         <ReadyPrimer
-          {...(kind === 'document' ? READY_DOCUMENT : READY_LIVENESS)}
+          {...(kind === 'document'
+            ? documentReady({
+                name: documentName.document,
+                subject: {
+                  idType: state.selectedIdType,
+                  title: specimenTitle(state.selectedIdType, fullName),
+                  country: country ? regionCountryName(country) : null,
+                },
+                twoSided,
+                accent: config.appearance?.primaryColor ?? '#5645F5',
+              })
+            : config.livenessMode === 'passive'
+              ? READY_LIVENESS_PASSIVE
+              : config.livenessGestureSet === 'directions' && config.livenessMode !== 'flash'
+                ? READY_LIVENESS_DIRECTIONS
+                : READY_LIVENESS)}
           onReady={() => setReady(true)}
         />
       ) : uploadOnlyDocument ? (
@@ -107,7 +135,7 @@ export function PreviewCapturePlaceholder({ kind }: { kind: 'document' | 'livene
         <div className="mx-auto flex h-64 w-64 flex-col items-center justify-center gap-3 rounded-full border-2 border-dashed border-border bg-muted/40 sm:h-72 sm:w-72">
           <ScanFace className="h-9 w-9 text-muted-foreground/60" />
           <p className="max-w-[12rem] text-center text-xs text-muted-foreground">
-            Presence Intelligence gesture challenges run here. The camera opens only for real users.
+            The face check runs here. The camera opens only for real users.
           </p>
         </div>
       )}

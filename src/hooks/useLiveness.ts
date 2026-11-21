@@ -3,7 +3,7 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
 import type { FaceWindow } from '../lib/liveness-cutout';
 import { createFaceMesh, type FaceMeshHandle } from '../liveness/face-mesh';
-import { pickChallenges, pickFallbackGestures, ChallengeTracker, type ChallengeEntry } from '../liveness/challenge-manager';
+import { DEFAULT_DIRECTION_COUNT, pickChallenges, pickFallbackGestures, planChallenges, ChallengeTracker, type ChallengeEntry } from '../liveness/challenge-manager';
 import { flashOutcome, FLASH_RETRY_GUIDANCE } from '../liveness/flash-outcome';
 import {
   detectNod,
@@ -12,6 +12,10 @@ import {
   createBlinkState,
   detectSmile,
   checkFacePosition,
+  DIRECTION_HOLD_FRAMES,
+  facing,
+  headTilt,
+  oppositeDirection,
   type BlinkState,
 } from '../liveness/gesture-detector';
 import {
@@ -22,15 +26,18 @@ import {
   type NormalizedLandmark,
 } from '../liveness/types';
 import { useText, type TextFn } from '../i18n';
-import { generateFlashSequence, runFlashSequence } from '../liveness/flash-detector';
+import { flashSequenceNamed, generateFlashSequence, runFlashSequence } from '../liveness/flash-detector';
 import { holdCameraSteady } from '../lib/camera-lock';
 import { recordLivenessSignals, recordPromptTimes } from '../lib/integrity-signals';
 import { recordingStart } from '../liveness/flash-timeline';
 import { PromptTimeline } from '../liveness/prompt-timeline';
+import { ResponseWatch } from '../liveness/response-watch';
 import { speak, stopSpeaking } from '../liveness/speech';
 import type { LightLevel, TrackedFace } from './useLightLevel';
 import { faceBoxOf } from '../lib/light-level';
 import { SelfieCandidates, type SelfieVerdict } from '../lib/selfie-candidates';
+import { planGate, type DirectionPlan, type PlanRequest } from '../liveness/direction-plan';
+import type { SelfieScene } from '../lib/selfie-review';
 import {
   CAPTURE_FRAMERATE,
   LIVENESS_VIDEO_BITRATE,
@@ -38,6 +45,12 @@ import {
   createVideoRecorder,
   logCaptureSize,
 } from '../lib/capture-settings';
+import { readyPauseShare, readyPauseStep } from '../liveness/ready-pause';
+import { isDirectionChallenge } from '../liveness/types';
+import { recordJourneyEvent } from '../lib/step-log';
+
+/** A head held the wrong way this long (about a second) is shown the way again. */
+const WRONG_WAY_FRAMES = 30;
 
 // The guidance shown (and spoken) when a second face enters the frame is the
 // catalogue text `presence.position.multipleFaces`.
@@ -103,6 +116,15 @@ export interface UseLivenessReturn {
    * not re-render the step. Read it in an animation frame; never in render.
    */
   livenessProgressRef: React.MutableRefObject<number>;
+  /**
+   * When the person last did anything with their face during a gesture step,
+   * on the performance clock (0 for never). A ref for the same reason: read
+   * it on a timer, never in render.
+   */
+  respondedAtRef: React.MutableRefObject<number>;
+  /** Counts each time the person has gone the wrong way on a head direction:
+   *  the narrator shows the way again when it changes. Never a failure. */
+  wrongWayCount: number;
 }
 
 // ---------------------------------------------------------------------------
@@ -132,6 +154,12 @@ export interface UseLivenessOptions {
    * judge the face's skin rather than the room behind it (lib/light-level).
    */
   faceRef?: React.MutableRefObject<TrackedFace | null>;
+  /**
+   * Asks Core for the gestures of one attempt, head directions or classic
+   * (liveness/direction-plan.ts). Called once per attempt with gestures; null
+   * or a failure leaves the SDK's own pick in place, with no plan named.
+   */
+  requestDirectionPlan?: (plan: PlanRequest) => Promise<DirectionPlan | null>;
 }
 
 // ---------------------------------------------------------------------------
@@ -152,6 +180,9 @@ const CAPTURE_WAIT_MS = 4000;
 
 /** Frames of a centred, well-placed face before the first challenge starts (~0.8s). */
 const POSITION_STABLE_FRAMES = 25;
+/** The share of the positioning part of the line the steady frames fill; the
+ *  pause fills the rest. */
+const POSITION_FRAMES_SHARE = 0.6;
 
 /**
  * How far into its segment the ring may grow on a challenge's clock alone.
@@ -170,6 +201,7 @@ export function useLiveness({
   lightLevel = 'ok',
   faceWindowRef,
   faceRef,
+  requestDirectionPlan,
 }: UseLivenessOptions): UseLivenessReturn {
   const [state, setState] = useState<LivenessState>({ phase: 'loading' });
   // The workflow's copy, read through a ref: the detector loop and setPhase are
@@ -189,6 +221,14 @@ export function useLiveness({
 
   const faceMeshRef = useRef<FaceMeshHandle | null>(null);
   const trackerRef = useRef<ChallengeTracker | null>(null);
+  // Core's head-direction plan for the current attempt (liveness/direction-plan.ts).
+  const planRef = useRef<{ status: 'none' | 'pending' | 'ready' | 'failed'; askedAt: number }>({ status: 'none', askedAt: 0 });
+  /** The flash colours Core picked for this attempt, once its plan arrives. */
+  const planFlashRef = useRef<string[] | null>(null);
+  const planAttemptRef = useRef(0);
+  const challengeStartedRef = useRef(false);
+  const requestDirectionPlanRef = useRef(requestDirectionPlan);
+  requestDirectionPlanRef.current = requestDirectionPlan;
   const rafRef = useRef<number>(0);
   const mountedRef = useRef(true);
   const processingRef = useRef(false);
@@ -199,10 +239,27 @@ export function useLiveness({
   const holdFramesRef = useRef<number>(0);
   const blinkStateRef = useRef<BlinkState>(createBlinkState());
   const positionStableRef = useRef<number>(0);
+  /** When the face first held in place, on the performance clock: the ready
+   *  pause runs from here (liveness/ready-pause.ts). Null while it is not in place. */
+  const readyAtRef = useRef<number | null>(null);
   // 0..1 across the WHOLE test, read by the ring on the frame. A REF so the
   // detector loop can update it every frame without re-rendering the step (the
   // phase itself is set only on transitions, deliberately, for the same reason).
   const livenessProgressRef = useRef<number>(0);
+  // When the person last did anything with their face during a gesture step,
+  // on the performance clock (0 for never). Read by the gesture narrator,
+  // which comes back to show a gesture only to someone who has stopped
+  // responding. A REF for the same reason as the progress above.
+  const responseWatchRef = useRef(new ResponseWatch());
+  const respondedAtRef = useRef<number>(0);
+  /** Where the person's nose tip rests (gesture-detector/directions.ts), taken
+   *  as they hold still before the first gesture: looking up and down are
+   *  measured against it. */
+  const restTiltRef = useRef<number | null>(null);
+  /** Frames in a row the head has faced the asked-for direction, and the wrong one. */
+  const directionFramesRef = useRef(0);
+  const wrongWayFramesRef = useRef(0);
+  const [wrongWayCount, setWrongWayCount] = useState(0);
   // When the running challenge's clock started, and how long it has. The
   // challenge segment of the ring grows on this clock.
   const challengeClockRef = useRef<{ startedAt: number; seconds: number } | null>(null);
@@ -306,6 +363,11 @@ export function useLiveness({
   const setPhase = useCallback((next: LivenessState) => {
     phaseRef.current = next.phase;
     setState(next);
+    // A failed attempt goes on the journey (drop-off insights, lib/step-log.ts).
+    if (next.phase === 'failed') {
+      const detail = livenessFailureDetail(next.reason, trackerRef.current?.current?.config.type);
+      if (detail) recordJourneyEvent('liveness_failed', detail);
+    }
 
     // Trigger speech for key transitions
     let textToSpeak = '';
@@ -351,9 +413,53 @@ export function useLiveness({
     const picked = pickChallenges(config);
     // Which prompts ran rides the claim, so the server knows whether a turn
     // was asked for (its shape-from-movement verdict depends on it).
-    recordLivenessSignals({ mode: config?.mode ?? 'gestures', challenges: picked.map((c) => c.type) });
+    recordLivenessSignals({ mode: config?.mode ?? 'gestures', challenges: picked.map((c) => c.type), directionPlanId: undefined });
     const tracker = new ChallengeTracker(picked);
     trackerRef.current = tracker;
+    challengeStartedRef.current = false;
+    // Core picks the gestures, head directions or classic, one plan per
+    // attempt. The pick above stands in until it arrives, and is replaced if
+    // the first instruction has not been given yet; the first instruction
+    // waits a moment for it.
+    const attempt = ++planAttemptRef.current;
+    const mode = config?.mode ?? 'gestures';
+    const asksGestures = mode === 'gestures' || mode === 'both';
+    const showsFlash = mode === 'flash' || mode === 'both';
+    // Core also picks the flash colours (2026-11-19): a flash-only check asks
+    // for no gestures, only colours.
+    // Within Core's 2 to 5, as the SDK's own pick: a count outside it was refused and left the SDK picking.
+    const flashCount = showsFlash ? Math.min(5, Math.max(2, Math.round(config?.flashSequenceLength ?? 4))) : undefined;
+    const request: PlanRequest = !asksGestures
+      ? { set: 'none', count: 0, flash: flashCount }
+      : config?.gestureSet === 'directions'
+        ? { set: 'directions', count: config.directionCount ?? DEFAULT_DIRECTION_COUNT, flash: flashCount }
+        : { set: 'classic', count: config?.challengeCount ?? 2, pool: config?.challengePool, flash: flashCount };
+    planFlashRef.current = null;
+    if (requestDirectionPlanRef.current) {
+      planRef.current = { status: 'pending', askedAt: performance.now() };
+      requestDirectionPlanRef.current(request)
+        .catch(() => null)
+        .then((plan) => {
+          if (!mountedRef.current || attempt !== planAttemptRef.current) return;
+          if (!plan || challengeStartedRef.current) {
+            planRef.current = { status: 'failed', askedAt: planRef.current.askedAt };
+            return;
+          }
+          planFlashRef.current = plan.flash.length > 0 ? plan.flash : null;
+          if (asksGestures) {
+            const planned = planChallenges(plan.prompts, config);
+            const next = new ChallengeTracker(planned);
+            trackerRef.current = next;
+            setChallenges([...next.all]);
+            recordLivenessSignals({ mode: config?.mode ?? 'gestures', challenges: planned.map((c) => c.type), directionPlanId: plan.planId });
+          } else {
+            recordLivenessSignals({ mode: config?.mode ?? 'gestures', challenges: trackerRef.current?.all.map((e) => e.config.type) ?? [], directionPlanId: plan.planId });
+          }
+          planRef.current = { status: 'ready', askedAt: planRef.current.askedAt };
+        });
+    } else {
+      planRef.current = { status: 'none', askedAt: 0 };
+    }
     promptsRef.current.reset();
     recordPromptTimes(undefined);
     flashRetriesRef.current = 0;
@@ -453,9 +559,21 @@ export function useLiveness({
     let base64: string | null = null;
     // The best front-on frame of the run, already cut to the standard frame.
     const chosen = selfiesRef.current.bestCanvas;
+    // The frame the selfie was cut from, for the review. The fallbacks below
+    // are whole frames themselves and need none.
+    let selfieScene: SelfieScene | null = null;
     if (chosen) {
       try {
         base64 = chosen.toDataURL('image/jpeg', SELFIE_IMAGE_QUALITY);
+        const scene = selfiesRef.current.bestScene;
+        if (scene) {
+          selfieScene = {
+            image: scene.canvas.toDataURL('image/jpeg', SELFIE_IMAGE_QUALITY),
+            width: scene.canvas.width,
+            height: scene.canvas.height,
+            face: scene.face,
+          };
+        }
       } catch {
         base64 = null;
       }
@@ -478,7 +596,7 @@ export function useLiveness({
     if (!mountedRef.current) return;
 
     logCaptureSize('selfie still', compressed);
-    setPhase({ phase: 'complete', selfieBase64: compressed });
+    setPhase({ phase: 'complete', selfieBase64: compressed, selfieScene });
   }, [setPhase, stopRecording]);
 
   // -----------------------------------------------------------------------
@@ -559,7 +677,9 @@ export function useLiveness({
     holdCameraSteady(video)
       .then((handBack) => {
         release = handBack;
-        return runFlashSequence(video, setFlashColor, isActive, generateFlashSequence(config?.flashSequenceLength));
+        // Core's colours when its plan came in time; the SDK's own pick otherwise (recorded as unplanned).
+        const planned = planFlashRef.current ? flashSequenceNamed(planFlashRef.current) : null;
+        return runFlashSequence(video, setFlashColor, isActive, planned ?? generateFlashSequence(config?.flashSequenceLength));
       })
       .finally(() => release())
       .then((result) => {
@@ -649,7 +769,12 @@ export function useLiveness({
     let value = 0;
     switch (phaseRef.current) {
       case 'positioning':
-        value = seg * Math.min(1, positionStableRef.current / POSITION_STABLE_FRAMES);
+        {
+          const frames = Math.min(1, positionStableRef.current / POSITION_STABLE_FRAMES);
+          const readyAt = readyAtRef.current;
+          const paused = readyPauseShare(readyAt, performance.now());
+          value = seg * (POSITION_FRAMES_SHARE * frames + (1 - POSITION_FRAMES_SHARE) * paused);
+        }
         break;
       case 'challenge': {
         const clock = challengeClockRef.current;
@@ -802,6 +927,7 @@ export function useLiveness({
       // Block starting challenges in poor light — guide the user to fix it.
       const light = lightingGuidance(lightLevelRef.current, tRef.current);
       if (light) {
+        readyAtRef.current = null;
         positionStableRef.current = Math.max(0, positionStableRef.current - 5);
         setPhase({ phase: 'positioning', guidance: light });
         return;
@@ -812,25 +938,46 @@ export function useLiveness({
       if (pos.isCentered && pos.isCorrectDistance) {
         positionStableRef.current++;
         if (positionStableRef.current > POSITION_STABLE_FRAMES && tracker) {
-          const current = tracker.current;
+          // In place: hold for the ready pause (liveness/ready-pause.ts)
+          // before asking for anything.
+          const ready = readyPauseStep(readyAtRef.current, performance.now());
+          readyAtRef.current = ready.readyAt;
+          if (!ready.go) {
+            setPhase({ phase: 'positioning', guidance: tRef.current('presence.position.holdStill') });
+            return;
+          }
+          // Core's head directions are on their way: a moment more of the
+          // ready pause rather than an order the SDK picked itself.
+          if (planGate(planRef.current, performance.now()) === 'wait') {
+            setPhase({ phase: 'positioning', guidance: tRef.current('presence.position.holdStill') });
+            return;
+          }
+          // Held still and facing the camera: this is the person at rest.
+          restTiltRef.current = headTilt(landmarks);
+          // The plan may have replaced the tracker since this frame began.
+          const started = trackerRef.current ?? tracker;
+          const current = started.current;
           if (current) {
+            challengeStartedRef.current = true;
             // Start recording when first challenge begins
             startRecording();
             cooldownFramesRef.current = 15; // ~0.5s grace period
             setPhase({
               phase: 'challenge',
-              index: tracker.currentIndex,
+              index: started.currentIndex,
               challenge: current.config,
               timeRemaining: current.config.timeoutSeconds,
             });
-            setChallenges([...tracker.all]);
+            setChallenges([...started.all]);
             startChallengeTimer(current.config.timeoutSeconds);
             maybeStartFlash(); // flash-only mode: the first challenge IS the flash
           }
         } else {
+          readyAtRef.current = null;
           setPhase({ phase: 'positioning', guidance: tRef.current('presence.position.holdStill') });
         }
       } else {
+        readyAtRef.current = null;
         // Decrease instead of resetting to 0 — brief wobbles don't lose all progress
         positionStableRef.current = Math.max(0, positionStableRef.current - 5);
         setPhase({
@@ -854,11 +1001,16 @@ export function useLiveness({
 
       if (continuityBroken(landmarks)) return;
 
+      responseWatchRef.current.seen(landmarks, performance.now());
+      respondedAtRef.current = responseWatchRef.current.respondedAt;
+
       // Check if user has moved out of position
       const pos = checkFacePosition(
         landmarks,
         tRef.current,
-        positionFrame(current.config.type === 'turn' || current.config.type === 'nod'),
+        positionFrame(
+          current.config.type === 'turn' || current.config.type === 'nod' || isDirectionChallenge(current.config.type),
+        ),
       );
       if (!pos.isCentered || !pos.isCorrectDistance) {
         holdFramesRef.current = 0; // the hold restarts once the face is back
@@ -914,6 +1066,32 @@ export function useLiveness({
           holdFramesRef.current += 1;
           detected = holdFramesRef.current >= HOLD_FRAMES;
           break;
+        case 'turnLeft':
+        case 'turnRight':
+        case 'lookUp':
+        case 'lookDown': {
+          // The wrong way is never a failure and never a red warning: it does
+          // not count, and after a second of it the narrator shows the way again.
+          const way = facing(landmarks, restTiltRef.current ?? headTilt(landmarks));
+          if (way === expectedType) {
+            wrongWayFramesRef.current = 0;
+            directionFramesRef.current += 1;
+            detected = directionFramesRef.current >= DIRECTION_HOLD_FRAMES;
+          } else {
+            directionFramesRef.current = 0;
+            if (way === oppositeDirection(expectedType)) {
+              wrongWayFramesRef.current += 1;
+              if (wrongWayFramesRef.current === WRONG_WAY_FRAMES) setWrongWayCount((n) => n + 1);
+            } else {
+              wrongWayFramesRef.current = 0;
+            }
+          }
+          if (detected) {
+            directionFramesRef.current = 0;
+            wrongWayFramesRef.current = 0;
+          }
+          break;
+        }
       }
 
       if (detected) {
@@ -1146,5 +1324,33 @@ export function useLiveness({
     flashing,
     retry,
     livenessProgressRef,
+    respondedAtRef,
+    wrongWayCount,
   };
+}
+
+/** The prompts a timeout means the head movement was not seen for. */
+const HEAD_MOVES: ReadonlySet<string> = new Set(['turn', 'nod', 'turnLeft', 'turnRight', 'lookUp', 'lookDown']);
+
+/**
+ * PURE. A failed liveness attempt in the journey's closed words, or null when
+ * it is not an attempt that failed (the camera or the model not loading are
+ * recorded elsewhere). A timeout on a head movement is `turn_not_seen`.
+ */
+export function livenessFailureDetail(
+  reason: 'timeout' | 'face_lost' | 'no_camera' | 'load_error' | 'flash_failed' | 'face_swap',
+  prompt: string | undefined,
+): string | null {
+  switch (reason) {
+    case 'timeout':
+      return prompt && HEAD_MOVES.has(prompt) ? 'turn_not_seen' : 'timeout';
+    case 'face_lost':
+      return 'no_face';
+    case 'face_swap':
+      return 'face_changed';
+    case 'flash_failed':
+      return 'other';
+    default:
+      return null;
+  }
 }

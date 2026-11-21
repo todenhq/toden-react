@@ -4,6 +4,7 @@ import React, { Component, type ErrorInfo, type ReactNode } from 'react';
 import { CircleAlert } from './icons';
 import { Button } from './ui/button';
 import { useText } from '../i18n';
+import { recordJourneyEvent } from '../lib/step-log';
 
 // Browser-only SDK; consumer bundlers inline process.env.NODE_ENV.
 declare const process: { env?: { NODE_ENV?: string } } | undefined;
@@ -57,6 +58,8 @@ export class VerificationErrorBoundary extends Component<Props, State> {
     // actually threw, making bugs (e.g. on liveness retake) undiagnosable.
     // eslint-disable-next-line no-console
     console.error('[Verification] Uncaught error in KYC flow:', error, info.componentStack);
+    // The applicant saw the crash screen (drop-off insights).
+    recordJourneyEvent('error_shown', 'crash');
     this.props.onError?.(error);
   }
 

@@ -1,30 +1,25 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Button } from '../ui/button';
 import { specimenSource, type DocumentSpecimenSubject } from './DocumentGhost';
 
 // "Now turn it over": the sample document turning from its front to its back,
-// in the place the camera will be. Mirrors the React Native and Flutter prompts.
+// in the place the camera will be. It moves on by itself once the person has
+// had the time to turn theirs: there is no button (user, 2026-11-16).
 
 const FLIP_DELAY_MS = 700;
 const FLIP_MS = 800;
 
 export function TurnOverPrompt({
   message,
-  doneLabel,
   aspect,
   accent,
   subject,
-  onDone,
 }: {
   message: string;
-  /** The button for someone quicker. Left off when the wait is short. */
-  doneLabel: string | null;
   aspect: number;
   accent: string;
   subject: DocumentSpecimenSubject;
-  onDone: () => void;
 }) {
   const [turned, setTurned] = useState(false);
 
@@ -60,7 +55,6 @@ export function TurnOverPrompt({
         />
       </div>
       <p className="text-center text-sm font-medium text-foreground">{message}</p>
-      {doneLabel && <Button onClick={onDone}>{doneLabel}</Button>}
     </div>
   );
 }

@@ -242,7 +242,10 @@ export default function DeviceHandoffGate({
         </VisuallyHidden>
 
         <div className="flex h-full flex-col overflow-hidden rounded-[inherit]">
-          <div className="relative flex min-h-12 items-center justify-between gap-2 px-3 pt-[calc(env(safe-area-inset-top)+1.25rem)]">
+          {/* The brand row is padded exactly as the flow's own header
+              (VerificationHeader row 1, plus its bottom room), so the logo and
+              the controls do not jump when the gate gives way to the flow. */}
+          <div className="relative flex shrink-0 items-center justify-between gap-2 px-6 pb-3 pt-[calc(env(safe-area-inset-top)+0.625rem)] sm:pb-4 sm:pt-[calc(env(safe-area-inset-top)+1rem)]">
             <HeaderBrand />
             <div className="flex shrink-0 items-center gap-1">
               {showThemeToggle !== false && <ThemeToggle />}

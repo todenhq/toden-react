@@ -122,8 +122,9 @@ export default function VerifyButton() {
 | `livenessMode`          | `'gestures' \| 'flash' \| 'both'`         | `'gestures'`        | How liveness is proven. See [Liveness modes](#liveness-modes).                                                       |
 | `flashSequenceLength`   | `number` (2–5)                            | `4`                 | Number of colours in the flash sequence, for `'flash'` / `'both'`.                                                   |
 | `livenessBrightScreen`  | `boolean`                                 | `true`              | While the selfie camera is on, show the flow in its light theme so the screen lights the face. See [Liveness modes](#liveness-modes). |
+| `livenessGestureGuide`  | `boolean`                                 | `true`              | On the liveness camera, a face icon pops up in the window, acts out the gesture being asked for once, then goes, coming back only if the person stops responding. The instruction is shown in words either way. Usually set with the workflow builder's "Show each gesture" switch. |
 | `selfieReview`         | `boolean`                                 | `false`             | Show the selfie with Retake and Continue after the liveness capture. Off by default: the capture hands straight on to the next step. A failed upload still shows it. |
-| `voiceGuidance`         | `boolean \| { enabled?, language? }`      | `true`              | Spoken liveness instructions (accessibility, TTS **output** — no microphone). `false` mutes it; pass `{ language: 'fr-FR' }` to set the voice. See [Robustness & error handling](#robustness--error-handling). |
+| `voiceGuidance`         | `boolean \| { enabled?, language?, voice? }` | `true`           | Spoken liveness instructions (accessibility, TTS **output** — no microphone). `false` mutes it; pass `{ language: 'fr-FR' }` to set the language, or `{ voice: 'lyra' }` for a Toden voice. Overrides the workflow's setting key by key. See [Voice guidance](#voice-guidance). |
 | `emailVerification`     | `EmailVerificationConfig`                 | off                 | Email OTP step after consent. See [Optional steps](#optional-steps).                                                 |
 | `phoneVerification`     | `PhoneVerificationConfig`                 | off                 | Phone OTP step (SMS or WhatsApp). See [Optional steps](#optional-steps).                                             |
 | `proofOfAddress`        | `ProofOfAddressConfig`                    | off                 | Proof-of-address upload after capture. See [Optional steps](#optional-steps).                                        |
@@ -134,7 +135,7 @@ export default function VerifyButton() {
 | `fullScreen`            | `boolean`                                 | `false`             | Force the fullscreen layout on every device (desktop drops the centered modal). Mobile is always fullscreen.          |
 | `disableClose`          | `boolean`                                 | `false`             | Hide the X and block **all** user dismissal (backdrop, Escape, swipe-down). The flow can then only be closed via `useVerification().close()`. The terminal "Submitted" step is already non-dismissible regardless. |
 | `requireMobileDevice`   | `boolean`                                 | `false`             | Refuse to run on desktop. Confirmed via hardware signals (GPU renderer, motion sensor, touch) — never viewport width, so responsive-mode desktops are rejected too. Desktop visitors get the handoff QR screen without the "continue on this device" option. The server re-checks and rejects with `mobile_device_required`. |
-| `assetsBasePath`        | `string`                                  | bundled data URIs   | Load the liveness gesture GIFs from a URL instead of the inlined data URIs. Only needed under a strict `img-src` CSP that forbids `data:`. When set, the face tracking files are also tried at `<assetsBasePath>/face-mesh/` first, before the Toden server and the public CDN. |
+| `assetsBasePath`        | `string`                                  | none                | Your own copy of the liveness face tracking files. When set, they are tried at `<assetsBasePath>/face-mesh/` first, before the Toden server and the public CDN. Liveness gestures are asked for in words and need no files. |
 | `deviceHandoff`         | `boolean`                                 | `true`              | On desktop, show a "continue on your phone" screen (QR + copyable link) before the flow starts — handy when the computer has no webcam. The user can still choose to continue on the current device, and when they finish on their phone the desktop completes automatically. The phone continues the same verification this device started: it walks the flow the server holds for it, and leaving the QR screen waits for the server to take the phone's link back. Set `false` to disable. Has no effect on mobile/touch devices. Skipped when nothing in the flow needs a camera, for example upload-only document capture (`allowDocumentScan: false`) with liveness off. |
 | `appearance`            | `VerificationAppearance`                           | brand defaults      | Brand & theme the modal — colors, logo, light/dark. See [Appearance & theming](#appearance--theming).                |
 | `consent`               | `VerificationConsentContent`                       | built-in copy       | Override the consent/welcome screen `title` and `description`. See [Consent screen copy](#consent-screen-copy).      |
@@ -444,6 +445,31 @@ import { Verification, VerificationError } from "@toden/react";
 > that records sound is a workflow with `documentAudio` or `livenessAudio` on, and a refused
 > microphone never stops a verification, so there is no microphone error code.
 
+### Voice guidance
+
+The liveness instructions are spoken as well as shown. `voiceGuidance` is a
+boolean or `{ enabled?, language?, voice? }`:
+
+- `enabled` (default `true`) turns the spoken prompts on or off.
+- `language` (BCP-47, default `'en-US'`) picks the device voice's language and the
+  language of Toden's clips (`'en-US'` plays the `en` clips).
+- `voice` is a Toden voice id, usually chosen per workflow in the builder (for
+  example `'lyra'` or `'rory'`). The SDK then plays Toden's recorded clips of that
+  voice, fetched from the Toden server when the liveness step opens. A prompt with
+  no clip (a workflow's own wording, a language without clips) or a clip that has
+  not loaded is spoken by the device voice, and nothing ever waits on the clips.
+  They are fetched with `fetch` and played through Web Audio, so a Content Security
+  Policy needs only the Toden server in `connect-src`, as it already does.
+
+The prop overrides the workflow's setting key by key: `{ voice: 'rory' }` keeps the
+workflow's `enabled` and `language`, and a bare `false` turns guidance off whatever
+the workflow says. Toden voices need `@toden/react` 4.3.0 or later; earlier versions
+use the device voice.
+
+```tsx
+<Verification apiKey="pk_live_xxx" workflowId="wf_abc123" voiceGuidance={{ voice: 'lyra' }} />
+```
+
 ### Network resilience
 
 Media uploads and the verify submission are wrapped in exponential-backoff retry
@@ -468,9 +494,13 @@ all: each side is uploaded as a photo, so only liveness can show this screen.
   one face remains. This guards capture quality and a class of spoofing.
 - **Lighting** — too-dark *and* too-bright (glare) conditions are detected live
   during liveness and document capture; the SDK shows guidance ("Move to a
-  brighter area" / "Too bright — reduce glare") and discourages auto-capture
+  brighter area" / "Too bright. Reduce the glare") and discourages auto-capture
   until lighting is acceptable.
 
 ## Documentation
 
 Full documentation, configuration options, and webhook setup: **[docs.toden.co/integrate/sdks/react](https://docs.toden.co/integrate/sdks/react)**.
+
+## Credits
+
+The cartoon person on the screen before the liveness camera is "Toon Head" by [Johan Melin](https://www.johanmelin.com), licensed under [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/). It has been changed: it is cut into parts so it can move, it is painted in shades of the workflow's colour, and its long hair is replaced with short hair of our own.

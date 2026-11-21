@@ -10,7 +10,7 @@ import { flashOverlayColor } from '../liveness/flash-overlay';
 import { Button } from '../components/ui/button';
 import { CameraPermissionPrimer } from '../components/CameraPermissionPrimer';
 import { ReadyPrimer } from '../components/ReadyPrimer';
-import { READY_LIVENESS, READY_LIVENESS_PASSIVE } from '../components/ready-primer-content';
+import { READY_LIVENESS, READY_LIVENESS_DIRECTIONS, READY_LIVENESS_PASSIVE } from '../components/ready-primer-content';
 import { useVerificationContext } from '../context/VerificationContext';
 import { useVerificationConfig } from '../context/VerificationConfigContext';
 import { multiIdEvidenceStep } from '../lib/multi-id';
@@ -23,8 +23,9 @@ import { recordsLivenessAudio } from '../lib/liveness-audio';
 import { useImageCapture } from '../hooks/useImageCapture';
 import { useImageCompress } from '../hooks/useImageCompress';
 import { useLiveness } from '../hooks/useLiveness';
+import type { PlanRequest } from '../liveness/direction-plan';
 import { useLightLevel, type TrackedFace } from '../hooks/useLightLevel';
-import { primeSpeech } from '../liveness/speech';
+import { prepareVoiceClips, primeSpeech } from '../liveness/speech';
 import { recordLivenessSignals, recordRecorderFailure } from '../lib/integrity-signals';
 import { markRecordingStart } from '../liveness/flash-timeline';
 import { withRetry } from '../lib/retry';
@@ -36,7 +37,7 @@ import {
   pickVideoMimeType,
   logCaptureSize,
 } from '../lib/capture-settings';
-import { challengeInstruction } from '../liveness/types';
+import { challengeInstruction, isDirectionChallenge } from '../liveness/types';
 import { useText, type TextFn } from '../i18n';
 import { usePortalHost } from '../lib/sdk-frame-context';
 import { LivenessHandover, useSelfieAutoAdvance } from './liveness-handover';
@@ -54,9 +55,11 @@ import {
 } from '../lib/liveness-cutout';
 import { LiveView } from './liveness/LiveView';
 import { ReviewView } from './liveness/ReviewView';
+import type { SelfieScene } from '../lib/selfie-review';
 import { useBlurBudget } from './liveness/use-blur-budget';
 import { useLivenessAttempts } from './liveness/use-liveness-attempts';
 import { attemptsLeftLine } from '../lib/liveness-attempts';
+import { journeyUpload } from '../lib/journey';
 
 /** How long the full-screen camera is held after the photo: the shutter, then
  *  the scan down the window (globals.css `liveness-scan`), then a breath. */
@@ -72,6 +75,8 @@ export function LivenessStep() {
   const t = useText();
   const portalHost = usePortalHost();
   const [preview, setPreview] = useState<string | null>(verificationState.selfieImage);
+  // The camera frame that photo was cut from: what the full-screen review shows.
+  const [previewScene, setPreviewScene] = useState<SelfieScene | null>(verificationState.selfieScene);
   // The fresh capture measured soft. A notice on the review, never a gate:
   // Continue stays available whatever it says (see lib/selfie-sharpness).
   const [selfieSoft, setSelfieSoft] = useState(false);
@@ -146,15 +151,29 @@ export function LivenessStep() {
   // screen-reflection flash sequence, or both. Workflow-configured.
   const livenessMode = config.livenessMode ?? 'gestures';
 
+  // The workflow's Toden voice: its clips start loading as the step opens, in
+  // the background. The device voice speaks any prompt whose clip is not in yet.
+  const voiceAssetsUrl = config.api?.voiceAssetsUrl;
+  useEffect(() => {
+    prepareVoiceClips(voiceAssetsUrl);
+  }, [voiceAssetsUrl]);
+
+  const livenessApi = config.api;
+  const requestDirectionPlan = useCallback(
+    (plan: PlanRequest) => livenessApi.livenessDirections(plan),
+    [livenessApi],
+  );
   const liveness = useLiveness({
     videoRef: camera.videoRef,
     cameraReady: camera.isReady && !preview,
     captureFrame: capture,
     compressImage: compress,
     lightLevel,
-    config: { mode: livenessMode, flashSequenceLength: config.flashSequenceLength },
+    config: { mode: livenessMode, flashSequenceLength: config.flashSequenceLength, gestureSet: config.livenessGestureSet, directionCount: config.livenessDirectionCount },
     faceWindowRef,
     faceRef: trackedFaceRef,
+    // Core picks the gestures of each attempt (liveness/direction-plan.ts).
+    requestDirectionPlan: requestDirectionPlan,
   });
 
   const syncFaceWindow = useCallback(() => {
@@ -314,6 +333,7 @@ export function LivenessStep() {
   React.useEffect(() => {
     if (liveness.state.phase !== 'complete') return;
     const selfie = liveness.state.selfieBase64;
+    const selfieScene = liveness.state.selfieScene;
 
     let cancelled = false;
 
@@ -346,8 +366,9 @@ export function LivenessStep() {
 
       if (cancelled) return;
 
+      setPreviewScene(selfieScene);
       setPreview(selfie);
-      dispatch({ type: 'SET_SELFIE_IMAGE', payload: selfie });
+      dispatch({ type: 'SET_SELFIE_IMAGE', payload: selfie, scene: selfieScene });
       uploadSelfie(selfie);
       // Measured AFTER the preview is up, so the review never waits on it. A
       // restored selfie is not measured: its bytes are gone by design.
@@ -381,9 +402,11 @@ export function LivenessStep() {
       const blob = new Blob([bytes], { type: mime });
 
       // Retried on transient failures (network / timeout / 5xx).
-      const mediaId = await withRetry(() => api.upload(blob, 'selfie'), {
-        onRetry: (attempt, total) => setRetryInfo({ attempt, total }),
-      });
+      const mediaId = await journeyUpload('selfie', () =>
+        withRetry(() => api.upload(blob, 'selfie'), {
+          onRetry: (attempt, total) => setRetryInfo({ attempt, total }),
+        }),
+      );
       dispatch({ type: 'SET_MEDIA_ID', payload: { mediaType: 'selfie', mediaId } });
       setRetryInfo(null);
       setIsUploading(false);
@@ -425,16 +448,8 @@ export function LivenessStep() {
     if (!camera.permissionDenied) permissionReportedRef.current = false;
   }, [camera.permissionDenied, config]);
 
-  // Track the last active gesture so the avatar stays visible during transitions
   const phase = liveness.state.phase;
   const activeChallenge = phase === 'challenge' ? liveness.state.challenge : null;
-
-  const lastGestureRef = useRef(activeChallenge?.type ?? null);
-  useEffect(() => {
-    if (activeChallenge?.type) {
-      lastGestureRef.current = activeChallenge.type;
-    }
-  }, [activeChallenge?.type]);
 
   // The workflow's maxLivenessAttempts: each failed check is reported, and the
   // answer adds the attempts left to the failure panel (or ends the flow).
@@ -447,6 +462,7 @@ export function LivenessStep() {
   const handleRetake = () => {
     primeSpeech();
     setPreview(null);
+    setPreviewScene(null);
     setUploadError(null);
     setSelfieSoft(false);
     setReady(true);
@@ -567,6 +583,7 @@ export function LivenessStep() {
       return (
         <ReviewView
           preview={preview}
+          scene={previewScene}
           title={
             isUploading
               ? t('presence.review.saving')
@@ -706,7 +723,11 @@ export function LivenessStep() {
           onBack={handleBack}
         />
         <ReadyPrimer
-          {...(livenessMode === 'passive' ? READY_LIVENESS_PASSIVE : READY_LIVENESS)}
+          {...(livenessMode === 'passive'
+            ? READY_LIVENESS_PASSIVE
+            : config.livenessGestureSet === 'directions' && livenessMode !== 'flash'
+              ? READY_LIVENESS_DIRECTIONS
+              : READY_LIVENESS)}
           onReady={() => {
             // Speech needs a user gesture to start — prime it on this tap, the
             // same way the permission primer does.
@@ -742,12 +763,6 @@ export function LivenessStep() {
   // Main liveness UI
   // ---------------------------------------------------------------------------
 
-  const isFlashChallenge = activeChallenge?.type === 'flash';
-  // Neither the flash nor the passive hold has a gesture to demonstrate.
-  const showAvatar =
-    (phase === 'challenge' || phase === 'challenge_passed') && !isFlashChallenge && activeChallenge?.type !== 'hold';
-  const avatarGesture = activeChallenge?.type ?? lastGestureRef.current;
-
   // Show the gray loading overlay only while the camera stream hasn't started yet.
   // Face mesh loading is separate — once the camera is live we show the feed and
   // display a non-blocking text indicator while the model finishes downloading.
@@ -758,6 +773,22 @@ export function LivenessStep() {
   const hasWrongGesture = challengeWarning === 'wrong_gesture';
   const hasMultipleFaces = challengeWarning === 'multiple_faces';
   const hasPositionWarning = challengeWarning && !hasWrongGesture;
+
+  // The narrator acts out the gesture while it is being asked for, and goes
+  // once it lands. Neither the flash nor the passive hold has a gesture, it
+  // keeps out of the way while the person is asked to move into place, and a
+  // workflow can switch it off.
+  const challengeType = activeChallenge?.type;
+  const narratedGesture =
+    config.livenessGestureGuide !== false &&
+    !hasPositionWarning &&
+    (challengeType === 'turn' ||
+      challengeType === 'nod' ||
+      challengeType === 'blink' ||
+      challengeType === 'smile' ||
+      isDirectionChallenge(challengeType))
+      ? challengeType
+      : null;
 
   // 'multiple_faces' is a sentinel — render the friendly guidance, not the code.
   const warningText = hasMultipleFaces ? t('presence.position.multipleFaces') : challengeWarning;
@@ -817,6 +848,22 @@ export function LivenessStep() {
   const passed = liveness.challenges.filter((entry) => entry.progress === 'passed').length;
   const total = liveness.challenges.length;
   const settingUp = isLoading || isFaceMeshLoading;
+  // Head directions: the line round the window is four sides. The side asked
+  // for lights up and those done are green. Not lit while the person is being
+  // asked to move back into place.
+  const directionTypes = liveness.challenges.map((entry) => entry.config.type).filter(isDirectionChallenge);
+  const sides =
+    directionTypes.length > 0
+      ? {
+          asked: !hasPositionWarning && isDirectionChallenge(challengeType) ? challengeType : null,
+          // The run's directions: three of the four, so the line closes when these are.
+          directions: directionTypes,
+          done: liveness.challenges
+            .filter((entry) => entry.progress === 'passed')
+            .map((entry) => entry.config.type)
+            .filter(isDirectionChallenge),
+        }
+      : null;
   return (
     <>
       {flashOverlay}
@@ -843,8 +890,10 @@ export function LivenessStep() {
                 : 'prompt'
         }
         warning={!settingUp && Boolean(hasWrongGesture || hasPositionWarning)}
-        gesture={showAvatar ? avatarGesture : null}
-        assetsBasePath={config.assetsBasePath}
+        gesture={narratedGesture}
+        respondedAtRef={liveness.respondedAtRef}
+        wrongWayCount={liveness.wrongWayCount}
+        sides={sides}
         lightingNote={
           isBright ? t('presence.lighting.brightNotice') : isDim ? t('presence.lighting.darkNotice') : null
         }

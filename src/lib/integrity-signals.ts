@@ -22,6 +22,8 @@ export interface LivenessSignals {
   challenges?: string[];
   /** When each gesture prompt appeared and passed (liveness/prompt-timeline.ts). */
   promptTimes?: PromptTime[];
+  /** The head-direction plan Core picked for this attempt (liveness/direction-plan.ts). Absent when the SDK picked its own. */
+  directionPlanId?: string;
   flash?: {
     passed: boolean;
     score: number;

@@ -17,7 +17,8 @@ import { stepAfterContact, stepBeforeContact } from '../lib/contact-steps';
 import { isBusinessFlow } from '../lib/business';
 import { isScopedBusiness } from '../lib/scope';
 import { businessKey } from '../i18n/business-variants';
-import { describeSendError, describeCheckError } from '../lib/contact-errors';
+import { codeIsUsedUp, describeSendError, describeCheckError, isWrongCode } from '../lib/contact-errors';
+import { recordJourneyEvent } from '../lib/step-log';
 import { defaultCountry } from '../lib/country-default';
 import { sentCodeLength } from '../lib/contact-code-length';
 import { sessionEndAction } from '../lib/session-cancelled';
@@ -120,6 +121,8 @@ export function ContactVerificationStep({ channel }: { channel: 'email' | 'phone
         ...(maxAttempts != null ? { maxAttempts } : {}),
         ...(isEmail ? {} : { via: sendVia }),
       });
+      // A code after an earlier one is a resend (drop-off insights).
+      if (challengeId !== null) recordJourneyEvent('code_resent', isEmail ? 'email' : 'phone');
       setSentLength(sentCodeLength(res.codeLength, configuredLength));
       setChallengeId(res.challengeId);
       setExpiresAt(res.expiresAt ?? null);
@@ -165,6 +168,7 @@ export function ContactVerificationStep({ channel }: { channel: 'email' | 'phone
         dispatch(ended);
         return;
       }
+      if (isWrongCode(err) || codeIsUsedUp(err)) recordJourneyEvent('code_invalid', isEmail ? 'email' : 'phone');
       codeDispatch({ type: 'checkFailed', error: err });
       setError(describeCheckError(err, t));
     } finally {
