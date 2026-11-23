@@ -113,11 +113,6 @@ export function HostedFlow({
 
   return (
     <VerificationProvider>
-      {/* A hosted flow is ALREADY in a session — the token names it — but the
-          reducer does not know that, and progress saving keys off the id. Without
-          this seed every hosted applicant's work was dropped, and a refresh sent
-          them back to the first step. */}
-      <HostedSessionSync sessionId={bootstrap.sessionId} progress={bootstrap.progress} bootstrap={bootstrap} api={api} />
       <HostedLifecycle onStart={onStart} onStepChange={onStepChange} />
       <VerificationConfigProvider
         apiKey={`${HANDOFF_TOKEN_PREFIX}${token}`}
@@ -189,6 +184,14 @@ export function HostedFlow({
         businessPrefill={snap.businessPrefill}
         assetsBasePath={snap.assetsBasePath}
       >
+        {/* A hosted flow is ALREADY in a session — the token names it — but the
+            reducer does not know that, and progress saving keys off the id. Without
+            this seed every hosted applicant's work was dropped, and a refresh sent
+            them back to the first step. It reads the flow's config (which
+            countries a resumed session may restore), so it must sit inside the
+            config provider: outside it, every hosted link crashed on load
+            (incident 2026-11-23, @toden/react 4.4.0). */}
+        <HostedSessionSync sessionId={bootstrap.sessionId} progress={bootstrap.progress} bootstrap={bootstrap} api={api} />
         <HostedFlowInner
           snapshot={carried}
           cameraNeeded={cameraNeeded}

@@ -1,5 +1,13 @@
 # Changelog
 
+## 4.4.1
+
+No breaking changes. No server release needed.
+
+### Fixed
+
+- **Hosted verification links open again.** In 4.4.0, every hosted link (the page a person opens from a verification link or the "continue on your phone" QR code) failed right after loading with "Something went wrong". The part of the flow that restores a person's saved progress now reads the workflow's settings from inside the flow, where they are available. Embedded `<Verification />` was not affected.
+
 ## 4.4.0
 
 No breaking changes.
