@@ -316,6 +316,74 @@ Done button. Everything else is the standard `<Verification />` prop surface abo
 > A user must have completed a KYC verification with a selfie before they can be
 > re-authenticated. Calling this for someone with no enrollment fires `onError`.
 
+### Calling `/biometric/authenticate` directly with a scoped publishable key
+
+The SDK never calls the standalone face re-authentication routes. With a scoped
+publishable key, a `<Verification />` face flow (`biometric-authentication` or
+`biometric-enrollment`) will need a biometric user token on its start, which this
+release does not send yet, so keep a legacy publishable key for embedded face
+flows for now; every other `<Verification />` flow needs no user token. If your page calls
+`POST /api/v1/biometric/authenticate` or `GET /api/v1/biometric/status/:externalUserId`
+itself with a **scoped** publishable key, each call also needs a short-lived user
+token in the `X-Toden-User-Token` header. A legacy publishable key needs none and
+ignores the header.
+
+Your server mints the token with a secret key that holds
+`user_tokens.biometric.write`, for the user in **its own** signed-in session, never
+for a user id the browser sends:
+
+```ts
+// Your server, e.g. POST /me/face-token
+const me = await currentUser(req); // from your session, not from the request body
+const r = await fetch("https://api.toden.co/api/v1/user-tokens/biometric", {
+  method: "POST",
+  headers: { Authorization: `Bearer ${process.env.TODEN_SECRET_KEY}`, "Content-Type": "application/json" },
+  body: JSON.stringify({ externalUserId: me.id, publishableKeyId: process.env.TODEN_PK_ID }),
+});
+res.json(await r.json()); // { token, externalUserId, purpose: "biometric", expiresAt, maxUses: 5 }
+```
+
+In the page, keep the token in memory only (never `localStorage`, a cookie or a
+URL), check it is for the user you are acting for, and send it beside the key:
+
+```ts
+const minted = await (await fetch("/me/face-token", { method: "POST" })).json();
+if (minted.externalUserId !== userId || minted.purpose !== "biometric") throw new Error("user_token_mismatch");
+const res = await fetch("https://api.toden.co/api/v1/biometric/authenticate", {
+  method: "POST",
+  headers: {
+    Authorization: "Bearer pk_live_xxx",
+    "X-Toden-User-Token": minted.token,
+    "Content-Type": "application/json",
+  },
+  body: JSON.stringify({ externalUserId: userId, selfie: selfieMediaId, liveness }),
+});
+```
+
+Act on the error **code**, never the status alone:
+
+| Answer | What to do |
+|---|---|
+| 403 `user_token_invalid` | Get one new token from your server and retry once. A retry of the same selfie gets the original verdict. |
+| 403 `user_token_required` | Send the header. |
+| 403 `scope_not_declared` | The key is limited to workflows and cannot call this route. |
+| 429 `too_many_attempts` | Too many face checks for this user. Try again in 15 minutes. |
+| 409 `selfie_already_used` | This selfie was already used for another user. Take a new one. |
+
+A token lasts at most 15 minutes and allows 5 calls. None of these refusals is a
+401, so they never mean your API key is invalid.
+
+When your server redeems the proof, pass the user it minted for, so a proof for
+anyone else is refused:
+
+```ts
+await fetch("https://api.toden.co/api/v1/biometric/verify-proof", {
+  method: "POST",
+  headers: { Authorization: `Bearer ${process.env.TODEN_SECRET_KEY}`, "Content-Type": "application/json" },
+  body: JSON.stringify({ token: proof, expectedExternalUserId: me.id }),
+});
+```
+
 ## Trigger button
 
 `<Verification />` renders a real `<button>`. Beyond the config props above it accepts standard button attributes (the props type is exported as `VerificationProps`), so you can treat it like any other button:

@@ -10,8 +10,8 @@ export type CameraPrimerStatus = 'checking' | 'needed' | 'granted';
  * When the Permissions API reports the camera as already granted we skip the
  * priming screen and start the camera straight away. Otherwise (prompt, denied,
  * or the API is unsupported) we show the "Allow camera access" primer first, so
- * the user knows the native OS prompt is coming and is primed to accept it —
- * mirroring Stripe Identity. The actual `getUserMedia` request (and therefore
+ * the user knows the native OS prompt is coming and is primed to accept it.
+ * The actual `getUserMedia` request (and therefore
  * the OS prompt) still only fires once the user taps "Grant access".
  */
 export function useCameraPrimer(): CameraPrimerStatus {

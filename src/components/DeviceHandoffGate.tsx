@@ -207,7 +207,8 @@ export default function DeviceHandoffGate({
     if (nothingMinted) { onLeave(); return; }
     // The mint failed and left nothing to give back.
     if (handoff.phase === 'error' && !handoff.unresolved) { onLeave(); return; }
-    if (leaving || handoff.phase === 'opened' || handoff.phase === 'submitted' || handoff.phase === 'declined') return;
+    // An opened phone is asked too: the server decides (lib/handoff-return.ts).
+    if (leaving || handoff.phase === 'submitted' || handoff.phase === 'declined') return;
     setLeaving(true);
     setLeaveError(null);
     void handoff.release()
@@ -444,7 +445,9 @@ function GateBody({
         </p>
       )}
 
-      {/* Continue here — disabled once the phone has opened the link. A
+      {/* Continue here, still offered once the phone has opened the link: a
+          phone left idle must not hold the person's verification. The server
+          refuses it if the phone did paid work (lib/handoff-return.ts). A
           mobile-only workflow has no such escape: the phone is the only path. */}
       <div className="w-full border-t border-border pt-4">
         {mobileOnly ? (
@@ -455,9 +458,9 @@ function GateBody({
         ) : (
           <Button
             variant="ghost"
-            className={cn('w-full gap-2', phase === 'opened' && 'pointer-events-none opacity-50')}
+            className="w-full gap-2"
             onClick={onContinueHere}
-            disabled={phase === 'opened' || phase === 'creating' || leaving}
+            disabled={phase === 'creating' || leaving}
           >
             {leaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Monitor className="h-4 w-4" />}
             {leaving ? t('handoff.leaving') : t('handoff.continueHere')}

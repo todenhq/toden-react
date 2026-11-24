@@ -19,7 +19,7 @@ interface CameraPermissionPrimerProps {
 
 /**
  * "Allow camera access" priming card, shown right before the native OS camera
- * permission prompt (mirrors Stripe Identity). It carries no StepHeader of its
+ * permission prompt. It carries no StepHeader of its
  * own so it can drop into a step that already renders one.
  */
 export function CameraPermissionPrimer({

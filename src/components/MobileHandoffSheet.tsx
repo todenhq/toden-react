@@ -19,6 +19,7 @@ import { isDesktopDevice } from '../lib/device';
 import { useText } from '../i18n';
 import type { HandoffSessionSnapshot } from '../services/api';
 import { handoffLeaveErrorMessage } from '../lib/handoff-leave-error';
+import { mayAskToReturnHandoff } from '../lib/handoff-return';
 
 /**
  * Mobile-only. Renders an unobtrusive "Continue on a different device" trigger
@@ -71,8 +72,8 @@ export function MobileHandoffSheet() {
   });
   // A failed mint that left nothing behind has nothing to give back.
   const nothingToReturn = handoff.phase === 'error' && !handoff.unresolved;
-  const returnBlocked = !nothingToReturn && (leaving || !handoff.sessionId ||
-    ['creating', 'error', 'opened', 'submitted', 'declined'].includes(handoff.phase));
+  // An opened session is asked too: the server decides (lib/handoff-return.ts).
+  const returnBlocked = !nothingToReturn && (leaving || !mayAskToReturnHandoff(handoff.sessionId, handoff.phase));
 
   const stayHere = async () => {
     if (returnBlocked || returningRef.current) return;

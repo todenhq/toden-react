@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { businessContinentOf, groupBusinessCountries } from './business';
 
 describe('registry countries by continent', () => {
-  it('files every register on its continent, the ones read through Didit included', () => {
+  it('files every register on its continent, including every country added later', () => {
     expect(['GH', 'SN', 'EG', 'NG'].map(businessContinentOf)).toEqual(['africa', 'africa', 'africa', 'africa']);
     expect(['BR', 'CL'].map(businessContinentOf)).toEqual(['southAmerica', 'southAmerica']);
     expect(['US', 'MX', 'JM'].map(businessContinentOf)).toEqual(['northAmerica', 'northAmerica', 'northAmerica']);

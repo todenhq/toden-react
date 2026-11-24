@@ -129,11 +129,11 @@ export function businessCountryName(code: string): string {
 }
 
 // Continent headings for the registry picker, Africa first. Read off the full
-// ISO map in lib/regions.ts, so every register (YouVerify's and the ~190 read
-// through Didit) lands on its continent; a hand-typed list here left every
+// ISO map in lib/regions.ts, so every register the server offers (around 190
+// countries) lands on its continent; a hand-typed list here left every
 // country added later under "Other". The Middle East counts as Asia, the
 // Americas split at South America, and Asia & Pacific at Oceania, the way the
-// server files them (kyc-core business-countries/didit.ts).
+// server files them.
 const REGIONS: Array<{ textKey: string; key: BusinessContinent }> = [
   { textKey: 'business.country.region.africa', key: 'africa' },
   { textKey: 'business.country.region.europe', key: 'europe' },

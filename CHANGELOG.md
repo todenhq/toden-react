@@ -1,5 +1,20 @@
 # Changelog
 
+## 4.5.0
+
+No breaking changes.
+
+**Deploy note for Toden:** the fix below needs the Toden server release with the idle phone fix (toden-core #743). Against an older server, "Continue on this device" on an opened phone link says the verification is already open on the phone, as before.
+
+### Fixed
+
+- **"Continue on this device" works after the phone has opened the link.** It was greyed out as soon as the phone opened the QR link, so a phone left idle kept the person's verification and the computer could not take it back. The button now stays available, and so does "Stay here" in the mid-flow sheet: the server hands the verification back when the phone did no paid work, and the phone is then told the verification continued on another device. When the phone has already done paid work, or a check is still running, the person is told the verification is already open on their phone, as before.
+
+### Added
+
+- **Calling face re-authentication directly with a scoped publishable key.** The README shows how a page that calls `POST /biometric/authenticate` itself sends a user token from your server in `X-Toden-User-Token`, keeps it in memory only, retries once on `user_token_invalid`, handles the new 409 `selfie_already_used`, and redeems the proof with `expectedExternalUserId`. With a scoped publishable key, a `<Verification />` face flow (`biometric-authentication` or `biometric-enrollment`) will need a biometric user token on its start, which this release does not send yet: keep a legacy publishable key for embedded face flows for now. Every other `<Verification />` flow needs no user token.
+- **API key expiry webhooks (your server only).** The `api_key.expiring` and `api_key.expired` webhook events go to your webhook endpoint, not to the SDK. Nothing in this SDK changes for them.
+
 ## 4.4.1
 
 No breaking changes. No server release needed.

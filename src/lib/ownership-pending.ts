@@ -2,7 +2,7 @@ import type { KeyPeopleSection } from './key-people-sections';
 
 // Shareholders the register has not sent yet.
 //
-// Some registers (read through Didit) take minutes to answer for a company's
+// Some registers take minutes to answer for a company's
 // shareholders. The server waits briefly when the company is picked, reads
 // again at submission and finishes in the background; when the owners arrive
 // they join the application's key people with their invite links. Two

@@ -1,7 +1,8 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, it, expect, vi } from 'vitest';
-import { canMintDeviceHandoff, handoffPollOutcome, mintLeftOwnershipOpen, serverRefused } from './useDeviceHandoff';
+import { canMintDeviceHandoff, handoffPollOutcome, mintLeftOwnershipOpen, serverRefused, type DeviceHandoffPhase } from './useDeviceHandoff';
+import { mayAskToReturnHandoff } from '../lib/handoff-return';
 import { sessionDeclinedCopy } from '../lib/session-declined';
 import { defaultText } from '../i18n/translate';
 
@@ -90,12 +91,12 @@ describe('the device-handoff mint guard', () => {
 // verification was continued on another device" beside a Retry Upload button
 // that could never succeed.
 
-/** The decision in `release`, as the hook makes it. */
+/** The decision in `release`, as the hook makes it (lib/handoff-return.ts). */
 async function release(
   cancel: (id: string) => Promise<unknown>,
-  { sessionId, phase }: { sessionId: string | null; phase: string },
+  { sessionId, phase }: { sessionId: string | null; phase: DeviceHandoffPhase },
 ): Promise<boolean> {
-  if (!sessionId || ['creating', 'error', 'opened', 'submitted'].includes(phase)) return false;
+  if (!mayAskToReturnHandoff(sessionId, phase)) return false;
   await cancel(sessionId);
   return true;
 }
@@ -107,11 +108,25 @@ describe('returning the handoff before verifying here', () => {
     expect(cancel).toHaveBeenCalledWith('s1');
   });
 
-  it('does not ask once the phone has the flow open', async () => {
-    // The server refuses the reclaim for the same reason. Going ahead here
-    // would spend a budget the phone is already using.
+  // Owner report, 2026-11-23: a phone that opened the link and sat idle kept
+  // the verification, and the desktop's "Continue on this device" was greyed
+  // out. The server decides now: it returns an idle phone's session and
+  // refuses one that did paid work, which surfaces as "already open on your phone".
+  it('asks once the phone has the flow open, and lets the server decide', async () => {
+    const cancel = vi.fn().mockResolvedValue({ cancelled: true });
+    await expect(release(cancel, { sessionId: 's1', phase: 'opened' })).resolves.toBe(true);
+    expect(cancel).toHaveBeenCalledWith('s1');
+  });
+
+  it('carries the refusal for a phone that did paid work, so the person is told', async () => {
+    const refused = Object.assign(new Error('in use'), { code: 'handoff_session_in_use' });
+    const cancel = vi.fn().mockRejectedValue(refused);
+    await expect(release(cancel, { sessionId: 's1', phase: 'opened' })).rejects.toBe(refused);
+  });
+
+  it.each(['creating', 'error', 'submitted', 'declined'] as const)('does not ask in %s', async (phase) => {
     const cancel = vi.fn();
-    await expect(release(cancel, { sessionId: 's1', phase: 'opened' })).resolves.toBe(false);
+    await expect(release(cancel, { sessionId: 's1', phase })).resolves.toBe(false);
     expect(cancel).not.toHaveBeenCalled();
   });
 

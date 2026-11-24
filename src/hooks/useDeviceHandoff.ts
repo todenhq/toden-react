@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { VerificationApi, HandoffSessionSnapshot, HandoffSessionStatusResponse } from '../services/api';
 import type { SessionDeclined } from '../lib/session-declined';
+import { mayAskToReturnHandoff } from '../lib/handoff-return';
 
 /**
  * Lifecycle of the desktop side of a device handoff:
@@ -196,7 +197,9 @@ export function useDeviceHandoff(
    *
    * Resolves TRUE once the server has taken the phone's session back. FALSE
    * means it could not be asked: no session yet, the mint failed, a release is
-   * already in flight, or the phone has the flow open. It THROWS when the
+   * already in flight, or the phone already finished (`mayAskToReturnHandoff`).
+   * A phone that has the flow open IS asked: the server hands back one that did
+   * no paid work and refuses one that did. It THROWS when the
    * server was asked and did not confirm. A lost response does not prove the
    * phone's session is gone, so the caller must not carry on as if it were:
    * two devices would both believe they may submit this verification.
@@ -204,7 +207,7 @@ export function useDeviceHandoff(
   const release = useCallback(async (): Promise<boolean> => {
     const id = sessionIdRef.current;
     const mint = mintRef.current;
-    if (!id || releasingRef.current || ['creating', 'error', 'opened', 'submitted'].includes(phaseRef.current)) return false;
+    if (releasingRef.current || !mayAskToReturnHandoff(id, phaseRef.current)) return false;
     releasingRef.current = true;
     try {
       await api.cancelHandoffSession(id);
